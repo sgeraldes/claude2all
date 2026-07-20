@@ -1,0 +1,16 @@
+# claude2bedrock configuration — Claude Code on AWS Bedrock (isolated profile).
+# Any SSO profile with Bedrock access works.
+AWS_PROFILE=your-aws-sso-profile
+AWS_REGION=us-east-1
+
+# Cross-region inference profile IDs. Verify what your account has enabled with:
+#   aws bedrock list-inference-profiles --region us-east-1 --profile $AWS_PROFILE
+# (Converse-enabled is not enough — Claude Code uses the InvokeModel path.)
+BEDROCK_OPUS_MODEL=us.anthropic.claude-opus-4-8
+BEDROCK_SONNET_MODEL=us.anthropic.claude-sonnet-5
+BEDROCK_HAIKU_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+# Claude Code 2.x's built-in default is the "fable" tier — it must also be
+# pinned to a Bedrock ID or the default request fails (400 data retention).
+BEDROCK_FABLE_MODEL=us.anthropic.claude-opus-4-8
+BEDROCK_SUBAGENT_MODEL=us.anthropic.claude-sonnet-5

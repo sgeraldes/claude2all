@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# claude2openai — run Claude Code against OpenAI Codex models (ChatGPT OAuth from
+# the Codex CLI) in an isolated profile. Mirrors claude2kimi: all env vars and
+# the config dir apply only to this process, so regular claude sessions are
+# unaffected. OAuth tokens are read from the Codex CLI's own ~/.codex/auth.json
+# (that file KEEPS its name — it belongs to the Codex CLI, not to this tool).
+set -euo pipefail
+
+EXE="$HOME/.claude2openai/claude2openai.exe"
+if [[ ! -x "$EXE" ]]; then
+  echo "claude2openai: missing binary: $EXE" >&2
+  echo "build it: cd /g/code/claude2openai && go build -ldflags '-s -w' -o claude2openai.exe . && cp claude2openai.exe ~/.claude2openai/" >&2
+  exit 1
+fi
+
+# Pass proxy-management subcommands straight through (no Claude Code involved).
+case "${1:-}" in
+  server|test|help|--help|-h)
+    exec "$EXE" "$@"
+    ;;
+esac
+
+# Everything else runs Claude Code through the proxy. Strip a leading explicit
+# `run` so `claude2openai run ...` and `claude2openai ...` behave the same.
+if [[ "${1:-}" == "run" ]]; then
+  shift
+fi
+
+# Isolated profile: own settings, history, credentials — nothing leaks to ~/.claude.
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/openai"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# Skip the Anthropic login/onboarding flow inside this profile only (official Kimi step 2,
+# scoped to the isolated config dir instead of the shared ~/.claude.json), trust the
+# launch directory, and mirror the main profile's bypass-permissions preference.
+node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1];
+const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
+j.hasCompletedOnboarding=true;
+j.penguinModeOrgEnabled=true;
+const cwd=process.cwd().replace(/\\/g,"/");
+(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
+fs.writeFileSync(jp,JSON.stringify(j,null,2));
+const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
+(s.permissions??={}).defaultMode??="bypassPermissions";
+s.skipDangerousModePermissionPrompt??=true;
+// Mirror useful prefs from the main profile (merge-only, never clobbers).
+// Deliberately excluded: hooks/plugins (backend-specific workflows), effortLevel
+// (Kimi docs pin CLAUDE_CODE_EFFORT_LEVEL=high via env, which wins over settings).
+let m={};try{m=JSON.parse(fs.readFileSync(process.env.HOME+"/.claude/settings.json","utf8"))}catch(e){}
+for(const k of ["env","statusLine","theme","editorMode","verbose","promptSuggestionEnabled","autoCompactEnabled","skipWorkflowUsageWarning","teammateMode","askUserQuestionTimeout","inputNeededNotifEnabled","agentPushNotifEnabled"])
+  if(s[k]===undefined&&m[k]!==undefined)s[k]=m[k];
+fs.writeFileSync(sp,JSON.stringify(s,null,2))' "$CLAUDE_CONFIG_DIR"
+
+# Pin every Claude model slot to the right gpt-5.6 variant by tier, so Claude
+# Code's built-in claude-* default ids never leak through. The proxy also maps
+# by tier, but pinning keeps /model output honest.
+#   main/fable/opus -> gpt-5.6-sol | sonnet + subagent -> gpt-5.6-terra | haiku -> gpt-5.6-luna
+MAIN_MODEL="${CODEX_MODEL:-gpt-5.6-sol}"
+SONNET_MODEL="${CODEX_SONNET_MODEL:-gpt-5.6-terra}"
+HAIKU_MODEL="${CODEX_HAIKU_MODEL:-gpt-5.6-luna}"
+SUBAGENT_MODEL="${CODEX_SUBAGENT_MODEL:-$SONNET_MODEL}"
+export ANTHROPIC_MODEL="$MAIN_MODEL"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$MAIN_MODEL"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$MAIN_MODEL"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET_MODEL"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU_MODEL"
+export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT_MODEL"
+
+unset ANTHROPIC_API_KEY  # conflicts with the proxy's bearer token if left over from other setups
+
+# Call the binary by exact path: a bare `claude2openai` via PATH would resolve
+# back to THIS wrapper script (same name) and recurse forever.
+exec "$EXE" run "$@"

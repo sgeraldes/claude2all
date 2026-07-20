@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# claude2bedrock — run Claude Code against AWS Bedrock in an isolated profile.
+# Same pattern as claude2kimi: all env vars and the config dir apply only to
+# this process, so your other claude sessions are unaffected.
+set -euo pipefail
+
+CFG="$HOME/.claude2bedrock/config"
+[[ -f "$CFG" ]] && source "$CFG"
+
+export AWS_PROFILE="${AWS_PROFILE:-your-aws-sso-profile}"
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+OPUS="${BEDROCK_OPUS_MODEL:-us.anthropic.claude-opus-4-8}"
+SONNET="${BEDROCK_SONNET_MODEL:-us.anthropic.claude-sonnet-5}"
+HAIKU="${BEDROCK_HAIKU_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
+FABLE="${BEDROCK_FABLE_MODEL:-$OPUS}"
+SUBAGENT="${BEDROCK_SUBAGENT_MODEL:-$SONNET}"
+
+# Isolated profile.
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# Seed the profile (merge-only, never clobbers): onboarding, cwd trust,
+# bypass-permissions default, selective settings mirror from the main profile,
+# global CLAUDE.md, custom skills, and MCP servers.
+node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1],home=process.env.HOME;
+const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
+j.hasCompletedOnboarding=true;
+const cwd=process.cwd().replace(/\\/g,"/");
+(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
+let g={};try{g=JSON.parse(fs.readFileSync(home+"/.claude.json","utf8"))}catch(e){}
+if(g.mcpServers)j.mcpServers={...g.mcpServers,...(j.mcpServers||{})};
+fs.writeFileSync(jp,JSON.stringify(j,null,2));
+const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
+(s.permissions??={}).defaultMode??="bypassPermissions";
+s.skipDangerousModePermissionPrompt??=true;
+let m={};try{m=JSON.parse(fs.readFileSync(home+"/.claude/settings.json","utf8"))}catch(e){}
+for(const k of ["env","statusLine","theme","editorMode","verbose","promptSuggestionEnabled","autoCompactEnabled","skipWorkflowUsageWarning","teammateMode","askUserQuestionTimeout","inputNeededNotifEnabled","agentPushNotifEnabled","remoteControlAtStartup","effortLevel"])
+  if(s[k]===undefined&&m[k]!==undefined)s[k]=m[k];
+fs.writeFileSync(sp,JSON.stringify(s,null,2));
+const md=home+"/.claude/CLAUDE.md";if(fs.existsSync(md)&&!fs.existsSync(path.join(dir,"CLAUDE.md")))fs.copyFileSync(md,path.join(dir,"CLAUDE.md"));
+const sk=home+"/.claude/skills";if(fs.existsSync(sk)&&!fs.existsSync(path.join(dir,"skills")))fs.cpSync(sk,path.join(dir,"skills"),{recursive:true})' "$CLAUDE_CONFIG_DIR"
+
+# Bedrock routing (per-model defaults; ANTHROPIC_MODEL must stay unset).
+export CLAUDE_CODE_USE_BEDROCK=1
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$OPUS"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$FABLE"
+export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT"
+unset ANTHROPIC_MODEL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN DISABLE_PROMPT_CACHING
+
+# AWS SSO credentials: re-login interactively when possible, else fail fast.
+if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+  if [[ -t 0 ]]; then
+    echo "claude2bedrock: SSO session expired — logging in..." >&2
+    aws sso login --profile "$AWS_PROFILE" >&2
+  else
+    echo "claude2bedrock: AWS SSO session expired for profile '$AWS_PROFILE'." >&2
+    echo "Run 'claude2bedrock' once in a terminal to complete 'aws sso login'." >&2
+    exit 1
+  fi
+fi
+
+exec claude "$@"

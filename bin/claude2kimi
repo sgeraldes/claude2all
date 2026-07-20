@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# claude2kimi — run Claude Code against Kimi K3 (Kimi Code plan) in an isolated profile.
+# Mirrors claude2kiro: all env vars and the config dir apply only to this process,
+# so your regular claude / claude2kiro sessions are unaffected.
+set -euo pipefail
+
+CFG="$HOME/.claude2kimi/config"
+if [[ ! -f "$CFG" ]]; then
+  echo "claude2kimi: missing config file: $CFG" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+source "$CFG"
+
+if [[ -z "${KIMI_API_KEY:-}" || "$KIMI_API_KEY" == "paste-your-kimi-code-api-key-here" ]]; then
+  echo "claude2kimi: set KIMI_API_KEY in $CFG first (Kimi Code Console -> Create API Key)." >&2
+  exit 1
+fi
+
+BASE_URL="${KIMI_BASE_URL:-https://api.kimi.com/coding/}"
+MODEL="${KIMI_MODEL:-k3[1m]}"
+WINDOW="${KIMI_CONTEXT_WINDOW:-1048576}"
+
+# Isolated profile: own settings, history, credentials — nothing leaks to ~/.claude.
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kimi"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# Seed the profile (merge-only, never clobbers): onboarding + Kimi third-party flag,
+# cwd trust, bypass-permissions default, selective settings mirror from the main
+# profile, global CLAUDE.md, custom skills, and MCP servers.
+node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1],home=process.env.HOME;
+const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
+j.hasCompletedOnboarding=true;
+j.penguinModeOrgEnabled=true;
+const cwd=process.cwd().replace(/\\/g,"/");
+(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
+let g={};try{g=JSON.parse(fs.readFileSync(home+"/.claude.json","utf8"))}catch(e){}
+if(g.mcpServers)j.mcpServers={...g.mcpServers,...(j.mcpServers||{})};
+fs.writeFileSync(jp,JSON.stringify(j,null,2));
+const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
+(s.permissions??={}).defaultMode??="bypassPermissions";
+s.skipDangerousModePermissionPrompt??=true;
+let m={};try{m=JSON.parse(fs.readFileSync(home+"/.claude/settings.json","utf8"))}catch(e){}
+for(const k of ["env","statusLine","theme","editorMode","verbose","promptSuggestionEnabled","autoCompactEnabled","skipWorkflowUsageWarning","teammateMode","askUserQuestionTimeout","inputNeededNotifEnabled","agentPushNotifEnabled","remoteControlAtStartup"])
+  if(s[k]===undefined&&m[k]!==undefined)s[k]=m[k];
+fs.writeFileSync(sp,JSON.stringify(s,null,2));
+const md=home+"/.claude/CLAUDE.md";if(fs.existsSync(md)&&!fs.existsSync(path.join(dir,"CLAUDE.md")))fs.copyFileSync(md,path.join(dir,"CLAUDE.md"));
+const sk=home+"/.claude/skills";if(fs.existsSync(sk)&&!fs.existsSync(path.join(dir,"skills")))fs.cpSync(sk,path.join(dir,"skills"),{recursive:true})' "$CLAUDE_CONFIG_DIR"
+
+# Official Kimi Code env vars for Claude Code.
+export ANTHROPIC_BASE_URL="$BASE_URL"
+export ANTHROPIC_API_KEY="$KIMI_API_KEY"
+unset ANTHROPIC_AUTH_TOKEN  # conflicts with ANTHROPIC_API_KEY if left over from other setups
+export ANTHROPIC_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="${KIMI_SONNET_MODEL:-$MODEL}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="${KIMI_HAIKU_MODEL:-$MODEL}"
+export CLAUDE_CODE_SUBAGENT_MODEL="${KIMI_SUBAGENT_MODEL:-$MODEL}"
+export CLAUDE_CODE_EFFORT_LEVEL=high
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$WINDOW"
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$WINDOW"
+
+exec claude "$@"

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# claude2work — Claude Code on a work (team) claude.ai subscription
+#. Isolated profile; independent of the main
+# ~/.claude and of every other wrapper.
+#
+# FIRST RUN: you will be sent through the browser OAuth login — sign in with
+# the work account. The token is stored only in this profile.
+set -euo pipefail
+
+PROFILE="$HOME/.claude-profiles/work"
+mkdir -p "$PROFILE"
+
+# Seed the profile (merge-only, never clobbers): onboarding, cwd trust,
+# bypass-permissions default, FULL settings mirror from the main profile
+# (same claude.ai product, other account), MCP servers.
+node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1],home=process.env.HOME;
+const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
+j.hasCompletedOnboarding=true;
+const cwd=process.cwd().replace(/\\/g,"/");
+(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
+let g={};try{g=JSON.parse(fs.readFileSync(home+"/.claude.json","utf8"))}catch(e){}
+if(g.mcpServers)j.mcpServers={...g.mcpServers,...(j.mcpServers||{})};
+fs.writeFileSync(jp,JSON.stringify(j,null,2));
+const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
+(s.permissions??={}).defaultMode??="bypassPermissions";
+s.skipDangerousModePermissionPrompt??=true;
+let m={};try{m=JSON.parse(fs.readFileSync(home+"/.claude/settings.json","utf8"))}catch(e){}
+for(const k of Object.keys(m)) if(s[k]===undefined) s[k]=m[k];
+for(const k of ["permissions","env"]) if(m[k]) s[k]={...m[k],...(s[k]||{})};
+fs.writeFileSync(sp,JSON.stringify(s,null,2));
+const md=home+"/.claude/CLAUDE.md";if(fs.existsSync(md)&&!fs.existsSync(path.join(dir,"CLAUDE.md")))fs.copyFileSync(md,path.join(dir,"CLAUDE.md"));
+const sk=home+"/.claude/skills";if(fs.existsSync(sk)&&!fs.existsSync(path.join(dir,"skills")))fs.cpSync(sk,path.join(dir,"skills"),{recursive:true})' "$PROFILE"
+
+export CLAUDE_CONFIG_DIR="$PROFILE"
+# Strip any routing left over from other wrappers so the claude.ai login is used.
+unset CLAUDE_CODE_USE_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
+      ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL \
+      ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL CLAUDE_CODE_SUBAGENT_MODEL
+
+exec claude "$@"

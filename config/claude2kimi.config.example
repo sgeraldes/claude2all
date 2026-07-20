@@ -1,0 +1,19 @@
+# claude2kimi configuration — Kimi Code plan (https://www.kimi.com/code/docs)
+# Create a key at the Kimi Code Console, then paste it below.
+KIMI_API_KEY=paste-your-kimi-code-api-key-here
+
+# Kimi Code endpoint (from the official docs — do not change).
+KIMI_BASE_URL=https://api.kimi.com/coding/
+
+# Model + context window. Quoting rules: no quotes needed here.
+#   Explorer/Expert/Master (or legacy Allegretto+): k3[1m] + 1048576  (1M context)
+#   Starter (or legacy Andante/Moderato):           k3     + 262144   (256K context)
+KIMI_MODEL=k3[1m]
+KIMI_CONTEXT_WINDOW=1048576
+
+# Tier models (Explorer+ plans serve all three).
+# kimi-for-coding and -highspeed are 256K-context coding models — they cover the
+# sonnet/haiku tiers (subagents, background tasks); k3 keeps the main tiers.
+KIMI_SONNET_MODEL=kimi-for-coding
+KIMI_HAIKU_MODEL=kimi-for-coding-highspeed
+KIMI_SUBAGENT_MODEL=kimi-for-coding
