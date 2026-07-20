@@ -81,8 +81,8 @@ Claude stays the orchestrator; the named backend does the delegated work headles
 - **`claude2kiro`** — install **[sgeraldes/claude2kiro](https://github.com/sgeraldes/claude2kiro)**
   (proxy with login, TUI dashboard, credits tracking) and use `claude2kiro run`.
 - **`claude2openai`** — log into the Codex CLI once (`codex login`), then build the
-  `claude2openai` proxy from its sibling repo (coming soon) and place the binary at
-  `~/.claude2openai/claude2openai.exe`.
+  proxy from **[sgeraldes/claude2openai](https://github.com/sgeraldes/claude2openai)**
+  and place the binary at `~/.claude2openai/claude2openai.exe`.
 - **`claude2personal`** — nothing to do; it imports your existing `~/.claude` login once.
 - **`claude2work`** — first run opens browser OAuth; sign in with the second account.
 
@@ -99,7 +99,8 @@ then `exec claude "$@"`. No daemons except where a backend needs a protocol prox
 
 - **[sgeraldes/claude2kiro](https://github.com/sgeraldes/claude2kiro)** — the Kiro
   proxy (this repo links to it; it links back here).
-- `claude2openai` proxy — Anthropic→OpenAI Responses bridge (repo coming soon).
+- **[sgeraldes/claude2openai](https://github.com/sgeraldes/claude2openai)** — the
+  OpenAI proxy: Anthropic Messages API → OpenAI Responses over ChatGPT OAuth.
 
 ## License
 
