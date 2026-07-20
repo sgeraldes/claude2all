@@ -19,6 +19,8 @@ cp agents/*.md "$HOME/.claude/agents/"
 ls agents/*.md | xargs -n1 basename | sed 's/^/    /'
 
 echo "==> Installing example configs (skipped where one exists)"
+mkdir -p "$HOME/.claude2all/examples"
+cp config/*.example "$HOME/.claude2all/examples/"
 for cfg in config/*.example; do
   name=$(basename "$cfg" .config.example)   # e.g. claude2kimi
   dest_dir="$HOME/.${name}"                  # e.g. ~/.claude2kimi
@@ -33,7 +35,12 @@ done
 
 cat <<'EOF'
 
-Done. Next steps per backend:
+Done. Easiest next step — the setup wizard configures backends interactively
+(keys, logins, proxy installs):
+
+  claude2all setup
+
+Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
   claude2bedrock  -> set AWS_PROFILE in ~/.claude2bedrock/config (SSO login happens on first run)
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro

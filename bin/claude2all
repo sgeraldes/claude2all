@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# claude2all — setup wizard and status for the claude2all launcher collection.
+#
+#   claude2all           first run: setup wizard; afterwards: status overview
+#   claude2all setup     run the interactive setup wizard
+#   claude2all status    show what is configured and working
+#   claude2all help      this text
+set -euo pipefail
+
+STATE_DIR="$HOME/.claude2all"
+MARKER="$STATE_DIR/configured"
+
+# ---------- helpers ------------------------------------------------------------
+have() { command -v "$1" >/dev/null 2>&1; }
+say()  { printf '%s\n' "$*"; }
+hr()   { printf '%s\n' "────────────────────────────────────────────"; }
+ok()   { say "  [ok]      $*"; }
+warn() { say "  [missing] $*"; }
+open_url() { cmd //c start "" "$1" >/dev/null 2>&1 || explorer.exe "$1" >/dev/null 2>&1 || true; }
+
+confirm() { # confirm <prompt> [default=y]
+  local d="${2:-y}" a
+  read -rp "    $* [$d] " a </dev/tty || a="$d"
+  a="${a:-$d}"
+  [[ "${a,,}" == y* ]]
+}
+
+interactive() { [[ -t 0 && -t 1 ]]; }
+
+# ---------- per-backend status probes (echo nothing; return 0/1) ---------------
+st_kimi()     { [[ -f "$HOME/.claude2kimi/config" ]] && ! grep -q 'paste-your-kimi-code-api-key-here' "$HOME/.claude2kimi/config"; }
+st_bedrock()  { [[ -f "$HOME/.claude2bedrock/config" ]] && ! grep -q 'your-aws-sso-profile' "$HOME/.claude2bedrock/config"; }
+st_openai()   { [[ -x "$HOME/.claude2openai/claude2openai.exe" && -f "$HOME/.codex/auth.json" ]]; }
+st_kiro()     { have claude2kiro || [[ -x "$HOME/.local/bin/claude2kiro.exe" ]]; }
+st_personal() { [[ -f "$HOME/.claude/.credentials.json" || -f "$HOME/.claude-profiles/personal/.credentials.json" ]]; }
+st_work()     { [[ -f "$HOME/.claude-profiles/work/.credentials.json" ]]; }
+
+probe() { # probe <fn> <label> [hint]
+  if "$1" >/dev/null 2>&1; then ok "$2"; else warn "$2${3:+ — $3}"; fi
+}
+
+# ---------- status -------------------------------------------------------------
+cmd_status() {
+  hr; say "claude2all — backend status"; hr
+  probe st_kimi     "claude2kimi      (Kimi K3)"            "paste key into ~/.claude2kimi/config or run: claude2all setup"
+  probe st_bedrock  "claude2bedrock   (AWS Bedrock)"        "set AWS_PROFILE in ~/.claude2bedrock/config"
+  probe st_openai   "claude2openai    (OpenAI gpt-5.6)"     "needs proxy binary + codex login"
+  probe st_kiro     "claude2kiro      (AWS Kiro)"           "install claude2kiro"
+  probe st_personal "claude2personal  (claude.ai #1)"       "log into claude once"
+  probe st_work     "claude2work      (claude.ai #2)"       "run claude2work once for OAuth"
+  say ""
+  say "Launchers: ~/.local/bin/claude2*  |  Subagents: ~/.claude/agents/"
+  say "Reconfigure any time: claude2all setup"
+}
+
+# ---------- setup steps --------------------------------------------------------
+setup_kimi() {
+  say ""; hr; say "KIMI (Kimi Code plan — Kimi K3)"
+  if st_kimi; then ok "already configured"; return; fi
+  say "  You need a Kimi Code API key (Kimi Code Console -> Create API Key)."
+  if confirm "Open the Kimi Code docs/console in your browser?"; then
+    open_url "https://www.kimi.com/code/docs/en/third-party-tools/other-coding-agents.html"
+  fi
+  local key
+  read -rsp "    Paste KIMI_API_KEY (input hidden, empty = skip): " key </dev/tty || key=""
+  echo
+  [[ -z "$key" ]] && { warn "skipped — edit ~/.claude2kimi/config later"; return; }
+  mkdir -p "$HOME/.claude2kimi"
+  [[ -f "$HOME/.claude2kimi/config" ]] || cp "$STATE_DIR/examples/claude2kimi.config.example" "$HOME/.claude2kimi/config" 2>/dev/null || true
+  if [[ -f "$HOME/.claude2kimi/config" ]]; then
+    sed -i "s|^KIMI_API_KEY=.*|KIMI_API_KEY=$key|" "$HOME/.claude2kimi/config"
+  else
+    printf 'KIMI_API_KEY=%s\nKIMI_BASE_URL=https://api.kimi.com/coding/\nKIMI_MODEL=k3[1m]\nKIMI_CONTEXT_WINDOW=1048576\nKIMI_SONNET_MODEL=kimi-for-coding\nKIMI_HAIKU_MODEL=kimi-for-coding-highspeed\nKIMI_SUBAGENT_MODEL=kimi-for-coding\n' "$key" > "$HOME/.claude2kimi/config"
+  fi
+  ok "key saved to ~/.claude2kimi/config"
+  if confirm "Test it now (claude2kimi -p \"say hi\")?"; then
+    claude2kimi -p "Reply with exactly: KIMI SETUP OK" 2>&1 | tail -1 || warn "test failed — check the key"
+  fi
+}
+
+setup_bedrock() {
+  say ""; hr; say "AWS BEDROCK (your AWS account via SSO)"
+  if st_bedrock; then ok "already configured"; return; fi
+  have aws || { warn "aws CLI not found — install it first (winget install Amazon.AWSCLI)"; return; }
+  say "  Available AWS profiles:"
+  aws configure list-profiles 2>/dev/null | sed 's/^/    /' | head -15 || true
+  local prof region
+  read -rp "    AWS SSO profile to use: " prof </dev/tty || prof=""
+  [[ -z "$prof" ]] && { warn "skipped"; return; }
+  read -rp "    Region [us-east-1]: " region </dev/tty || region=""
+  region="${region:-us-east-1}"
+  mkdir -p "$HOME/.claude2bedrock"
+  [[ -f "$HOME/.claude2bedrock/config" ]] || cp "$STATE_DIR/examples/claude2bedrock.config.example" "$HOME/.claude2bedrock/config" 2>/dev/null || true
+  sed -i "s|^AWS_PROFILE=.*|AWS_PROFILE=$prof|; s|^AWS_REGION=.*|AWS_REGION=$region|" "$HOME/.claude2bedrock/config"
+  ok "profile saved"
+  if ! aws sts get-caller-identity --profile "$prof" >/dev/null 2>&1; then
+    if confirm "SSO session expired — run 'aws sso login' now (browser)?"; then
+      aws sso login --profile "$prof" </dev/tty >/dev/tty 2>&1 || warn "sso login failed"
+    fi
+  fi
+  if aws sts get-caller-identity --profile "$prof" >/dev/null 2>&1; then
+    ok "AWS credentials work"
+    if confirm "Test it now (claude2bedrock -p \"say hi\")?"; then
+      claude2bedrock -p "Reply with exactly: BEDROCK SETUP OK" 2>&1 | tail -1 || warn "test failed — check model ids in the config comments"
+    fi
+  fi
+}
+
+setup_openai() {
+  say ""; hr; say "OPENAI (Codex models via your ChatGPT subscription)"
+  if st_openai; then ok "already configured"; return; fi
+  # 1. codex CLI login
+  if [[ ! -f "$HOME/.codex/auth.json" ]]; then
+    have codex || { warn "codex CLI not found — install it: npm i -g @openai/codex"; return; }
+    if confirm "Run 'codex login' now (browser)?"; then
+      codex login </dev/tty >/dev/tty 2>&1 || warn "codex login failed"
+    fi
+  else
+    ok "codex CLI session found"
+  fi
+  # 2. proxy binary
+  if [[ ! -x "$HOME/.claude2openai/claude2openai.exe" ]]; then
+    say "  The proxy binary needs to be built from source (Go required)."
+    if ! have go; then warn "Go not found — install it (winget install GoLang.Go), then rerun setup"; return; fi
+    if confirm "Clone sgeraldes/claude2openai and build it now?"; then
+      local dest
+      read -rp "    Clone directory [~/code/claude2openai]: " dest </dev/tty || dest=""
+      dest="${dest:-$HOME/code/claude2openai}"
+      dest="${dest/#\~/$HOME}"
+      if [[ ! -d "$dest" ]]; then
+        git clone -q https://github.com/sgeraldes/claude2openai "$dest" && ok "cloned to $dest"
+      fi
+      (cd "$dest" && go build -ldflags "-s -w" -o claude2openai.exe .) || { warn "build failed"; return; }
+      mkdir -p "$HOME/.claude2openai"
+      cp "$dest/claude2openai.exe" "$HOME/.claude2openai/"
+      ok "binary installed to ~/.claude2openai/"
+    fi
+  fi
+  if st_openai && confirm "Test it now (claude2openai -p \"say hi\")?"; then
+    claude2openai -p "Reply with exactly: OPENAI SETUP OK" 2>&1 | tail -1 || warn "test failed"
+  fi
+}
+
+setup_kiro() {
+  say ""; hr; say "KIRO (AWS Kiro via the claude2kiro proxy)"
+  if st_kiro; then ok "claude2kiro already installed"; return; fi
+  say "  claude2kiro is a separate project (sgeraldes/claude2kiro)."
+  say "  Install options:"
+  say "    1) Official installer (PowerShell, recommended)"
+  say "    2) Download latest release binary with gh"
+  say "    3) Skip"
+  local pick
+  read -rp "    Choose [1/2/3]: " pick </dev/tty || pick="3"
+  case "$pick" in
+    1) pwsh -NoProfile -Command "iwr -useb https://raw.githubusercontent.com/sgeraldes/claude2kiro/main/install.ps1 | iex" </dev/tty >/dev/tty 2>&1 || warn "installer failed" ;;
+    2) have gh || { warn "gh CLI not found"; return; }
+       gh release download -R sgeraldes/claude2kiro --pattern '*.exe' --dir "$HOME/.local/bin" --clobber && chmod +x "$HOME"/.local/bin/claude2kiro*.exe 2>/dev/null || warn "download failed" ;;
+    *) return ;;
+  esac
+  if st_kiro; then
+    ok "claude2kiro installed"
+    if confirm "Run 'claude2kiro login' now (browser)?"; then
+      claude2kiro login </dev/tty >/dev/tty 2>&1 || warn "login failed"
+    fi
+  fi
+}
+
+setup_personal() {
+  say ""; hr; say "PERSONAL claude.ai account (subscription #1)"
+  if st_personal; then ok "claude.ai login found — claude2personal imports it automatically"; return; fi
+  say "  claude2personal imports the login from your main claude profile."
+  if confirm "Run 'claude' now to log in (browser)?"; then
+    claude </dev/tty >/dev/tty 2>&1 || true
+  fi
+  st_personal && ok "login found" || warn "still no login — run claude and sign in"
+}
+
+setup_work() {
+  say ""; hr; say "WORK claude.ai account (subscription #2)"
+  if st_work; then ok "already logged in"; return; fi
+  say "  The first claude2work run opens browser OAuth for the second account."
+  if confirm "Run 'claude2work' now to log in (browser)?"; then
+    claude2work </dev/tty >/dev/tty 2>&1 || true
+  fi
+  st_work && ok "login found" || warn "still no login — run claude2work when ready"
+}
+
+# ---------- setup wizard -------------------------------------------------------
+cmd_setup() {
+  interactive || { say "claude2all setup needs an interactive terminal."; exit 1; }
+  mkdir -p "$STATE_DIR"
+  hr; say "claude2all setup — which backends do you want to configure?"; hr
+  cat <<'EOF'
+    1) Kimi K3          (Kimi Code plan, API key)
+    2) AWS Bedrock      (your AWS account, SSO)
+    3) OpenAI gpt-5.6   (ChatGPT subscription via Codex CLI)
+    4) AWS Kiro         (via claude2kiro proxy)
+    5) claude.ai #1     (personal subscription)
+    6) claude.ai #2     (work/team subscription)
+EOF
+  local picks
+  read -rp "  Enter numbers separated by spaces (e.g. 1 3 5), or 'all': " picks </dev/tty || picks=""
+  [[ -z "$picks" ]] && { say "Nothing selected — bye."; exit 0; }
+  [[ "${picks,,}" == *all* ]] && picks="1 2 3 4 5 6"
+
+  for p in $picks; do
+    case "$p" in
+      1) setup_kimi ;;
+      2) setup_bedrock ;;
+      3) setup_openai ;;
+      4) setup_kiro ;;
+      5) setup_personal ;;
+      6) setup_work ;;
+      *) warn "unknown choice: $p" ;;
+    esac
+  done
+
+  date +%F > "$MARKER"
+  say ""; hr; say "Setup finished — status:"; hr
+  cmd_status
+}
+
+# ---------- dispatch -----------------------------------------------------------
+case "${1:-}" in
+  setup)        cmd_setup ;;
+  status|"")    if [[ -f "$MARKER" || "${1:-}" == "status" ]]; then cmd_status; else cmd_setup; fi ;;
+  help|-h|--help)
+    sed -n '2,9p' "$0" ;;
+  *) say "unknown command: $1 (try: claude2all help)"; exit 1 ;;
+esac

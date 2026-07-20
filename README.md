@@ -26,9 +26,16 @@ Windows + Git Bash first; every launcher also has a `.cmd` twin for PowerShell.
 git clone https://github.com/sgeraldes/claude2all
 cd claude2all
 ./install.sh        # copies launchers to ~/.local/bin, subagents to ~/.claude/agents
+claude2all setup    # interactive wizard: pick backends, enter keys, do logins,
+                    # build/install the claude2openai and claude2kiro proxies
 ```
 
-Then set up the backends you want (see [Setup per backend](#setup-per-backend)) and:
+The wizard asks which backends you want, then walks each one: API keys (hidden
+input), browser logins opened for you (Kimi console, AWS SSO, claude.ai OAuth,
+codex login), and building/installing the two proxy projects. Rerun it any time;
+`claude2all` (or `claude2all status`) shows what is configured and working.
+
+Then:
 
 ```bash
 claude2kimi        # Claude Code, powered by Kimi K3
