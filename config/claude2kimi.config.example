@@ -6,12 +6,9 @@ KIMI_API_KEY=paste-your-kimi-code-api-key-here
 KIMI_BASE_URL=https://api.kimi.com/coding/
 
 # Model + context window. Quoting rules: no quotes needed here.
-# Model ids come from GET /v1/models (verified live 14-sep-2026):
-#   k3       ctx 1048576  (1M)    <- default
-#   k3-256k  ctx  262144  (256K)
-# Do not use the `k3[1m]` suffix: the API rejects it with 401 authentication_error
-# ("recognized as other:k3[1m]"), which Claude Code shows as an expired session.
-KIMI_MODEL=k3
+#   Explorer/Expert/Master (or legacy Allegretto+): k3[1m] + 1048576  (1M context)
+#   Starter (or legacy Andante/Moderato):           k3     + 262144   (256K context)
+KIMI_MODEL=k3[1m]
 KIMI_CONTEXT_WINDOW=1048576
 
 # Tier models (Explorer+ plans serve all three).
