@@ -72,7 +72,7 @@ setup_kimi() {
   if [[ -f "$HOME/.claude2kimi/config" ]]; then
     sed -i "s|^KIMI_API_KEY=.*|KIMI_API_KEY=$key|" "$HOME/.claude2kimi/config"
   else
-    printf 'KIMI_API_KEY=%s\nKIMI_BASE_URL=https://api.kimi.com/coding/\nKIMI_MODEL=k3[1m]\nKIMI_CONTEXT_WINDOW=1048576\nKIMI_SONNET_MODEL=kimi-for-coding\nKIMI_HAIKU_MODEL=kimi-for-coding-highspeed\nKIMI_SUBAGENT_MODEL=kimi-for-coding\n' "$key" > "$HOME/.claude2kimi/config"
+    printf 'KIMI_API_KEY=%s\nKIMI_BASE_URL=https://api.kimi.com/coding/\nKIMI_MODEL=k3\nKIMI_CONTEXT_WINDOW=1048576\nKIMI_SONNET_MODEL=kimi-for-coding\nKIMI_HAIKU_MODEL=kimi-for-coding-highspeed\nKIMI_SUBAGENT_MODEL=kimi-for-coding\n' "$key" > "$HOME/.claude2kimi/config"
   fi
   ok "key saved to ~/.claude2kimi/config"
   if confirm "Test it now (claude2kimi -p \"say hi\")?"; then

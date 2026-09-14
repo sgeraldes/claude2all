@@ -57,7 +57,7 @@ claude2bedrock --resume              # resume last session (per-profile history)
 
 | Launcher | Backend | Models it loads |
 |---|---|---|
-| `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3[1m]` main · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
+| `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3` main (the API rejects `k3[1m]`) · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
 | `claude2deepseek` | [DeepSeek](https://api-docs.deepseek.com) API plan (Anthropic-compatible endpoint) | `deepseek-flash[1m]` main · `deepseek-flash` haiku and subagents · `--model pro` for `deepseek-v4-pro`; `--effort` |
 | `claude2kiro run` | AWS Kiro via **[claude2kiro](https://github.com/sgeraldes/claude2kiro)** | nothing pinned — `auto`, Kiro picks per request |
 | `claude2bedrock` | AWS Bedrock native (Claude) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
