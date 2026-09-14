@@ -39,6 +39,7 @@ Then:
 
 ```bash
 claude2kimi        # Claude Code, powered by Kimi K3
+claude2deepseek    # Claude Code, powered by your DeepSeek API plan
 claude2bedrock     # Claude Code, powered by your AWS Bedrock account
 claude2work        # Claude Code on your second claude.ai subscription
 ```
@@ -57,6 +58,7 @@ claude2bedrock --resume              # resume last session (per-profile history)
 | Launcher | Backend | Models it loads |
 |---|---|---|
 | `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3[1m]` main · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
+| `claude2deepseek` | [DeepSeek](https://api-docs.deepseek.com) API plan (Anthropic-compatible endpoint) | `deepseek-flash[1m]` main · `deepseek-flash` haiku and subagents · `--model pro` for `deepseek-v4-pro`; `--effort` |
 | `claude2kiro run` | AWS Kiro via **[claude2kiro](https://github.com/sgeraldes/claude2kiro)** | nothing pinned — `auto`, Kiro picks per request |
 | `claude2bedrock` | AWS Bedrock native (Claude) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
 | `claude2bedrock --openai` | AWS Bedrock Converse (OpenAI) | Astra default · Sol · Terra · Luna for haiku-class requests; `--model` / `--effort` |
@@ -76,12 +78,20 @@ regular Claude Code session you just ask in natural language:
 
 Claude stays the orchestrator; the named backend does the delegated work headlessly
 (`claude2<backend> -p "<task>"`) and returns its output. Available subagents:
-`kimi-k3`, `kiro`, `bedrock`, `openai`. Check `/agents` in a session to see them.
+`kimi-k3`, `deepseek`, `kiro`, `bedrock`, `openai`. Check `/agents` in a session to see them.
 
 ## Setup per backend
 
 - **`claude2kimi`** — paste your Kimi Code API key into `~/.claude2kimi/config`
   (Kimi Code Console → Create API Key).
+- **`claude2deepseek`** — paste your DeepSeek API key into `~/.claude2deepseek/config`
+  (https://platform.deepseek.com/api_keys). DeepSeek serves the Anthropic Messages API
+  natively at `https://api.deepseek.com/anthropic`, so there is no proxy. Defaults follow
+  DeepSeek's own Claude Code recipe: `deepseek-flash[1m]` for the main, opus and sonnet
+  slots, plain `deepseek-flash` for haiku and subagents, effort `max`, auto-compact at
+  768K tokens. `--model flash|pro|<id>` switches the main model (`pro` is
+  `deepseek-v4-pro`, about four times the price of Flash); `--effort low|medium|high|max`
+  overrides the effort. Every value can also be pinned in the config file.
 - **`claude2bedrock`** has two modes. Without a flag it keeps Claude Code's native
   Bedrock/InvokeModel path for Anthropic models. `claude2bedrock --openai` uses the
   local proxy plus ConverseStream for OpenAI models. OpenAI mode defaults to profile
@@ -127,7 +137,7 @@ Nothing writes to the source `~/.claude`.
 
 ## Perfiles: sincronización en cada lanzamiento
 
-`claude2kiro`, `claude2openai`, `claude2kimi` y `claude2bedrock` sincronizan las
+`claude2kiro`, `claude2openai`, `claude2kimi`, `claude2deepseek` y `claude2bedrock` sincronizan las
 instrucciones antes de iniciar Claude Code. Bedrock cubre los perfiles `bedrock`
 y `bedrock-openai`. `claude2personal` y `claude2work` mantienen su seed propio.
 Los comandos de administración de OpenAI que no inician Claude Code conservan

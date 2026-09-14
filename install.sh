@@ -47,6 +47,7 @@ Done. Easiest next step — the setup wizard configures backends interactively
 
 Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
+  claude2deepseek -> paste your DeepSeek API key into ~/.claude2deepseek/config
   claude2bedrock  -> native Claude mode, or --openai for Astra/Sol/Terra over Converse
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro
   claude2openai   -> needs the claude2openai proxy binary (see README)

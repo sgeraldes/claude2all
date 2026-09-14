@@ -159,7 +159,7 @@ function syncProfile(dir, backend, home = process.env.HOME || os.homedir()) {
   } else Object.assign(next, owned); // A missing source mount must not erase the profile.
 
   j.hasCompletedOnboarding = true;
-  if (backend === 'kimi' || backend === 'openai') j.penguinModeOrgEnabled = true;
+  if (backend === 'kimi' || backend === 'openai' || backend === 'deepseek') j.penguinModeOrgEnabled = true;
   const cwd = process.cwd().replace(/\\/g, '/');
   (j.projects ??= {})[cwd] = { ...(j.projects[cwd] || {}), hasTrustDialogAccepted: true };
   if (global.mcpServers) j.mcpServers = { ...global.mcpServers, ...(j.mcpServers || {}) };
