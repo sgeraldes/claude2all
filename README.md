@@ -58,7 +58,8 @@ claude2bedrock --resume              # resume last session (per-profile history)
 |---|---|---|
 | `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3[1m]` main · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
 | `claude2kiro run` | AWS Kiro via **[claude2kiro](https://github.com/sgeraldes/claude2kiro)** | nothing pinned — `auto`, Kiro picks per request |
-| `claude2bedrock` | AWS Bedrock (your account) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
+| `claude2bedrock` | AWS Bedrock native (Claude) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
+| `claude2bedrock --openai` | AWS Bedrock Converse (OpenAI) | Astra default · Sol · Terra · Luna for haiku-class requests |
 | `claude2openai` | OpenAI via ChatGPT OAuth (Codex CLI session) | `gpt-5.6-sol` main · `gpt-5.6-terra` sonnet · `gpt-5.6-luna` haiku |
 | `claude2personal` | claude.ai subscription #1 | unpinned (account default; `/model` to change) |
 | `claude2work` | claude.ai subscription #2 (team) | unpinned |
@@ -81,10 +82,14 @@ Claude stays the orchestrator; the named backend does the delegated work headles
 
 - **`claude2kimi`** — paste your Kimi Code API key into `~/.claude2kimi/config`
   (Kimi Code Console → Create API Key).
-- **`claude2bedrock`** — set `AWS_PROFILE` in `~/.claude2bedrock/config` to an SSO
-  profile with Bedrock access; first run does `aws sso login` for you. Model IDs must
-  be enabled for the *InvokeModel* path (Converse-enabled is not enough — the config
-  comments have the check command).
+- **`claude2bedrock`** has two modes. Without a flag it keeps Claude Code's native
+  Bedrock/InvokeModel path for Anthropic models. `claude2bedrock --openai` uses the
+  local proxy plus ConverseStream for OpenAI models. OpenAI mode defaults to profile
+  `dfx5-dfx5-internal-apps-dev-administratoraccess`, region `us-west-2`, and Astra;
+  override these with `BEDROCK_OPENAI_AWS_PROFILE`, `BEDROCK_OPENAI_AWS_REGION`,
+  `BEDROCK_MODEL` (`astra`, `sol`, `terra`, `luna`, or a full inference profile ID),
+  and `BEDROCK_SMALL_MODEL` (default `luna`). Run `aws sso login --sso-session dfx5`
+  if the SSO token expires. `claude2bedrock --openai test` verifies the full proxy path.
 - **`claude2kiro`** — install **[sgeraldes/claude2kiro](https://github.com/sgeraldes/claude2kiro)**
   (proxy with login, TUI dashboard, credits tracking) and use `claude2kiro run`.
 - **`claude2openai`** — log into the Codex CLI once (`codex login`), then build the
@@ -100,7 +105,7 @@ profile (`~/.claude-profiles/<backend>`), seed it (merge-only — your
 bypass-permissions preference, workspace trust, statusline, global `CLAUDE.md`,
 skills, and MCP servers follow you), export the backend's env vars and model pins,
 then `exec claude "$@"`. No daemons except where a backend needs a protocol proxy
-(Kiro, OpenAI). Nothing touches your main `~/.claude`.
+(Kiro, OpenAI, and Bedrock OpenAI). Nothing touches your main `~/.claude`.
 
 ## Related
 

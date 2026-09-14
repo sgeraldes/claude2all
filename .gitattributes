@@ -1,4 +1,4 @@
-* text=auto
+* text=auto eol=lf
 
 # Bash launchers must stay LF or Git Bash breaks on the shebang line.
 install.sh text eol=lf

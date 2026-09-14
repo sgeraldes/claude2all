@@ -42,7 +42,7 @@ Done. Easiest next step — the setup wizard configures backends interactively
 
 Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
-  claude2bedrock  -> set AWS_PROFILE in ~/.claude2bedrock/config (SSO login happens on first run)
+  claude2bedrock  -> native Claude mode, or --openai for Astra/Sol/Terra over Converse
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro
   claude2openai   -> needs the claude2openai proxy binary (see README)
   claude2personal -> works immediately if ~/.claude has a claude.ai login
