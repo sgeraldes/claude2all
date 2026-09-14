@@ -166,8 +166,27 @@ Un JSON inválido detiene el lanzamiento con el nombre del archivo, sin reemplaz
 
 El script compara tamaño, mtime y ctime de origen y destino. Cuando cambian,
 compara SHA-256; sólo copia contenido diferente. Tampoco reescribe JSON idénticos.
-`install.sh` instala el script compartido antes de actualizar los launchers.
+`install.sh` instala los scripts compartidos antes de actualizar los launchers.
 Se necesita Node.js 18 o posterior y Git Bash en Windows.
+
+### Tope por reloj
+
+Las corridas headless (`-p`) tienen un tope de 90 minutos por defecto. Las sesiones
+interactivas no tienen tope. Se puede cambiar por corrida o para el entorno:
+
+```bash
+claude2bedrock --openai --model luna --effort low --max-minutes 45 -p "despliega y verifica"
+CLAUDE2_MAX_MINUTES=30 claude2kiro remote -p "revisa este diff"
+```
+
+`--max-minutes <n>` y `CLAUDE2_MAX_MINUTES` requieren un entero positivo; el flag
+prevalece sobre la variable. Al llegar al límite, el launcher termina sólo los
+procesos de la corrida de Claude Code, espera hasta 20 segundos y fuerza el cierre si
+siguen vivos. Escribe
+`[claude2all] TIEMPO AGOTADO: <n> min, corrida cortada` en stderr y en
+`CLAUDE2ALL_RUN_LOG` cuando ese archivo existe, y devuelve el código 124. Los comandos
+administrativos y los procesos `server` no se supervisan, por lo que un `remote` con
+tope nunca detiene un proxy compartido.
 
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 

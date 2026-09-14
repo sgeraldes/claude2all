@@ -4,6 +4,10 @@
 # uses the local Anthropic Messages -> Bedrock Converse proxy for OpenAI models.
 set -euo pipefail
 
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+
 # Seed-only mode skips credentials and backend startup. It still performs the sync.
 if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
   PROFILE=bedrock

@@ -28,6 +28,7 @@ Guidelines:
   (Claude model ids are not served by the Codex backend; the proxy maps them by tier —
   opus/fable→gpt-5.6-sol, sonnet→gpt-5.6-terra, haiku→gpt-5.6-luna — but pinning avoids
   surprises).
+- The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
 - For multi-step tasks add `--max-turns 30` to bound the run.
 - If it fails with an auth error mentioning `codex login`, tell the user to run
   `codex login` — do not retry. (Auth comes from the Codex CLI's own ~/.codex/auth.json;

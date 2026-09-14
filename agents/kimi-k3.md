@@ -20,6 +20,7 @@ Guidelines:
 - Make the prompt fully self-contained: exact file paths, relevant context, and precisely
   what output you expect. The Kimi instance cannot see this conversation.
 - The working directory is inherited, so relative paths and project files work.
+- The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
 - For multi-step tasks add `--max-turns 30` to bound the run.
 - `--dangerously-skip-permissions` lets Kimi edit files and run commands; drop that flag
   if you only want read-only analysis (in `-p` mode any permission prompt is auto-denied).

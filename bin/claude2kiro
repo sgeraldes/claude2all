@@ -13,6 +13,16 @@ if [[ ! -x "$EXE" ]]; then
   echo "claude2kiro: missing proxy binary: $EXE (install sgeraldes/claude2kiro or set CLAUDE2KIRO_EXE)" >&2
   exit 1
 fi
+case "${1:-}" in
+  server|test|help|--help|-h|login|logout|config|desktop)
+    exec "$EXE" "$@"
+    ;;
+esac
+
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+
 export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kiro"
 node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" kiro
 exec "$EXE" "$@"

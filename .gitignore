@@ -1,0 +1,5 @@
+# Test fixtures left by tests/profile-sync.cjs for inspection; delete by name when done.
+tests/.profile-sync-fixture-*/
+
+# Windows device-name file that a redirect to nul creates by accident in Git Bash.
+nul
