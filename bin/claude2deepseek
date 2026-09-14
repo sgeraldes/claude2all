@@ -24,7 +24,7 @@ if [[ -z "${DEEPSEEK_API_KEY:-}" || "$DEEPSEEK_API_KEY" == "paste-your-deepseek-
 fi
 
 FLASH="${DEEPSEEK_FLASH_MODEL:-deepseek-flash[1m]}"
-PRO="${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro}"
+PRO="${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro[1m]}"
 
 # --model flash|pro|<id> and --effort low|medium|high|max, same shape as
 # claude2bedrock --openai. Anything else is passed through to Claude Code.

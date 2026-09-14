@@ -90,7 +90,7 @@ Claude stays the orchestrator; the named backend does the delegated work headles
   DeepSeek's own Claude Code recipe: `deepseek-flash[1m]` for the main, opus and sonnet
   slots, plain `deepseek-flash` for haiku and subagents, effort `max`, auto-compact at
   768K tokens. `--model flash|pro|<id>` switches the main model (`pro` is
-  `deepseek-v4-pro`, about four times the price of Flash); `--effort low|medium|high|max`
+  `deepseek-v4-pro[1m]`, about four times the price of Flash); `--effort low|medium|high|max`
   overrides the effort. Every value can also be pinned in the config file.
 - **`claude2bedrock`** has two modes. Without a flag it keeps Claude Code's native
   Bedrock/InvokeModel path for Anthropic models. `claude2bedrock --openai` uses the

@@ -19,7 +19,7 @@ Pick the model and effort when the task calls for it:
 
 ```bash
 claude2deepseek --model pro --effort max -p "<task>" --dangerously-skip-permissions
-# --model accepts flash (default, deepseek-flash[1m]), pro (deepseek-v4-pro), or a DeepSeek model id.
+# --model accepts flash (default, deepseek-flash[1m]), pro (deepseek-v4-pro[1m]), or a DeepSeek model id.
 # --effort accepts low, medium, high, or max (default max).
 ```
 

@@ -9,10 +9,11 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic
 # Both have a 1M context and 384K max output; Pro costs about four times Flash.
 #   deepseek-flash[1m]  V4.1 Flash. The [1m] suffix is the official Claude Code recipe;
 #                       it tells Claude Code to budget the full 1M window for that slot.
-#   deepseek-v4-pro     V4 Pro, kept in service after 14-sep-2026 at unchanged billing.
+#   deepseek-v4-pro[1m] V4 Pro, kept in service after 14-sep-2026 at unchanged billing.
+#                       The API accepts the [1m] suffix on both models (verified 14-sep-2026).
 # `--model flash` and `--model pro` on the command line pick these two aliases.
 DEEPSEEK_FLASH_MODEL=deepseek-flash[1m]
-DEEPSEEK_PRO_MODEL=deepseek-v4-pro
+DEEPSEEK_PRO_MODEL=deepseek-v4-pro[1m]
 DEEPSEEK_MODEL=deepseek-flash[1m]
 
 # Tier models. Sonnet follows the main model (and `--model`) unless pinned here;

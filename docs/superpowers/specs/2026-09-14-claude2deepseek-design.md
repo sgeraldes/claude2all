@@ -16,7 +16,7 @@ other bridges: isolated profile, one command, `.cmd` twin, delegation subagent, 
 | Endpoint | `https://api.deepseek.com/anthropic` (Anthropic Messages API, native) |
 | Auth | `ANTHROPIC_AUTH_TOKEN=<DeepSeek API key>`; `x-api-key` also accepted |
 | Main model | `deepseek-flash[1m]` (V4.1 Flash, 1M context, 384K output) |
-| Second model | `deepseek-v4-pro` (V4 Pro, 1M context, 384K output, about 4x the price) |
+| Second model | `deepseek-v4-pro[1m]` (V4 Pro, 1M context, 384K output, about 4x the price; the API accepts `[1m]` on both models, verified live) |
 | Haiku / subagent | `deepseek-flash` |
 | Effort | `CLAUDE_CODE_EFFORT_LEVEL=max`; DeepSeek maps it to `reasoning_effort` |
 | Windows | `CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432`, hard window 1M |
