@@ -83,4 +83,4 @@ export CLAUDE_CODE_EFFORT_LEVEL="$EFFORT"
 export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$COMPACT"
 export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$WINDOW"
 
-exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- claude "$@"
+exec claude "$@"
