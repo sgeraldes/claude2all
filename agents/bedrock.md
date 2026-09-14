@@ -17,8 +17,9 @@ claude2bedrock -p "<task>" --dangerously-skip-permissions
 Or use an OpenAI model over Bedrock Converse (Astra is the default):
 
 ```bash
-BEDROCK_MODEL=astra claude2bedrock --openai -p "<task>" --dangerously-skip-permissions
-# BEDROCK_MODEL may also be sol, terra, luna, or a full inference profile ID.
+claude2bedrock --openai --model astra --effort high -p "<task>" --dangerously-skip-permissions
+# --model accepts astra, sol, terra, luna, or a full inference profile ID.
+# --effort accepts low, medium, high, or max and overrides Claude Code's effort signal.
 ```
 
 Guidelines:
@@ -32,4 +33,7 @@ Guidelines:
 - If SSO expires, run `aws sso login --sso-session dfx5`, then retry.
 - OpenAI mode uses its own profile at `~/.claude-profiles/bedrock-openai`; native
   mode continues to use `~/.claude-profiles/bedrock`.
+- Routing defaults: Luna medium for deployments and operations; Terra max for coding;
+  Sol high for complex tasks; Astra high for design and complex reviews, including code
+  review, adversarial review, and bug hunting.
 - Return the Bedrock output verbatim. If you truncate it, say so in one line.

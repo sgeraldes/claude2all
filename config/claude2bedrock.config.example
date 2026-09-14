@@ -9,6 +9,8 @@ BEDROCK_OPENAI_AWS_PROFILE=dfx5-dfx5-internal-apps-dev-administratoraccess
 BEDROCK_OPENAI_AWS_REGION=us-west-2
 BEDROCK_MODEL=astra
 BEDROCK_SMALL_MODEL=luna
+# Optional: low, medium, high, or max. Overrides Claude Code effort and model defaults.
+# BEDROCK_EFFORT=high
 
 # Cross-region inference profile IDs. Verify what your account has enabled with:
 #   aws bedrock list-inference-profiles --region us-east-1 --profile $AWS_PROFILE

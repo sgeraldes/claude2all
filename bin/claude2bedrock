@@ -16,7 +16,30 @@ if [[ "${1:-}" == "--openai" ]]; then
 fi
 
 if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
-  EXE="$HOME/.claude2openai/claude2openai.exe"
+  BEDROCK_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --model)
+        [[ $# -ge 2 ]] || { echo "claude2bedrock: --model requires astra, sol, terra, luna, or an inference profile ID" >&2; exit 2; }
+        export BEDROCK_MODEL="$2"
+        shift 2
+        ;;
+      --effort)
+        [[ $# -ge 2 ]] || { echo "claude2bedrock: --effort requires low, medium, high, or max" >&2; exit 2; }
+        case "$2" in low|medium|high|max) export BEDROCK_EFFORT="$2" ;; *) echo "claude2bedrock: invalid --effort '$2' (expected low, medium, high, or max)" >&2; exit 2 ;; esac
+        shift 2
+        ;;
+      *)
+        BEDROCK_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set -- "${BEDROCK_ARGS[@]}"
+fi
+
+if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
+  EXE="${CLAUDE2OPENAI_EXE:-$HOME/.claude2openai/claude2openai.exe}"
   if [[ ! -x "$EXE" ]]; then
     echo "claude2bedrock: missing proxy binary: $EXE" >&2
     echo "Build it: cd /g/code/claude2openai && go build -ldflags '-s -w' -o claude2openai.exe . && cp claude2openai.exe ~/.claude2openai/" >&2

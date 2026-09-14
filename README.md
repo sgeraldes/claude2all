@@ -59,7 +59,7 @@ claude2bedrock --resume              # resume last session (per-profile history)
 | `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3[1m]` main · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
 | `claude2kiro run` | AWS Kiro via **[claude2kiro](https://github.com/sgeraldes/claude2kiro)** | nothing pinned — `auto`, Kiro picks per request |
 | `claude2bedrock` | AWS Bedrock native (Claude) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
-| `claude2bedrock --openai` | AWS Bedrock Converse (OpenAI) | Astra default · Sol · Terra · Luna for haiku-class requests |
+| `claude2bedrock --openai` | AWS Bedrock Converse (OpenAI) | Astra default · Sol · Terra · Luna for haiku-class requests; `--model` / `--effort` |
 | `claude2openai` | OpenAI via ChatGPT OAuth (Codex CLI session) | `gpt-5.6-sol` main · `gpt-5.6-terra` sonnet · `gpt-5.6-luna` haiku |
 | `claude2personal` | claude.ai subscription #1 | unpinned (account default; `/model` to change) |
 | `claude2work` | claude.ai subscription #2 (team) | unpinned |
@@ -88,8 +88,26 @@ Claude stays the orchestrator; the named backend does the delegated work headles
   `dfx5-dfx5-internal-apps-dev-administratoraccess`, region `us-west-2`, and Astra;
   override these with `BEDROCK_OPENAI_AWS_PROFILE`, `BEDROCK_OPENAI_AWS_REGION`,
   `BEDROCK_MODEL` (`astra`, `sol`, `terra`, `luna`, or a full inference profile ID),
-  and `BEDROCK_SMALL_MODEL` (default `luna`). Run `aws sso login --sso-session dfx5`
-  if the SSO token expires. `claude2bedrock --openai test` verifies the full proxy path.
+  and `BEDROCK_SMALL_MODEL` (default `luna`). `--model <alias>` is the command-line
+  equivalent of `BEDROCK_MODEL`; `--effort <low|medium|high|max>` exports
+  `BEDROCK_EFFORT`, which wins over Claude Code's own effort signal. The proxy sends
+  this accepted Bedrock OpenAI shape: `{"reasoning":{"effort":"<value>"}}`.
+  Defaults are Astra/Sol `high`, Terra `max`, Luna `medium`. Run `aws sso login --sso-session dfx5`
+  if the SSO token expires. `claude2bedrock --openai test --model terra --effort max`
+  verifies the full proxy path.
+
+### OpenAI Bedrock combinations
+
+```bash
+claude2bedrock --openai --model luna --effort medium -p "despliega y verifica el servicio"
+claude2bedrock --openai --model terra --effort max -p "implementa y prueba el cambio"
+claude2bedrock --openai --model sol --effort high -p "resuelve este problema complejo"
+claude2bedrock --openai --model astra --effort high -p "revisa este diff y encuentra bugs"
+```
+
+Use Luna medium for deployments and operations; Terra max for coding; Sol high for
+complex tasks; and Astra high for design plus complex reviews, including code review,
+adversarial review, and bug hunting.
 - **`claude2kiro`** — install **[sgeraldes/claude2kiro](https://github.com/sgeraldes/claude2kiro)**
   (proxy with login, TUI dashboard, credits tracking) and use `claude2kiro run`.
 - **`claude2openai`** — log into the Codex CLI once (`codex login`), then build the
