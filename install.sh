@@ -7,8 +7,13 @@ cd "$(dirname "$0")"
 
 echo "==> Installing launchers to ~/.local/bin"
 mkdir -p "$HOME/.local/bin"
+# Install the shared seed before any launcher that calls it.
+cp bin/claude2all-profile.cjs "$HOME/.local/bin/"
 for f in bin/claude2*; do
-  cp "$f" "$HOME/.local/bin/"
+  [[ "$f" == *.cjs ]] && continue
+  # MSYS cp can resolve an extensionless destination to a running .exe (Kiro).
+  # Node uses the exact filename and leaves the proxy binary in place.
+  node -e 'const fs=require("fs"),path=require("path");fs.copyFileSync(process.argv[1],path.join(process.argv[2],path.basename(process.argv[1])))' "$f" "$HOME/.local/bin"
   [[ "$f" == *.cmd ]] || chmod +x "$HOME/.local/bin/$(basename "$f")"
   echo "    $(basename "$f")"
 done

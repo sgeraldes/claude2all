@@ -118,12 +118,73 @@ adversarial review, and bug hunting.
 
 ## How it works
 
-Each launcher is a ~70-line bash script: point `CLAUDE_CONFIG_DIR` at an isolated
-profile (`~/.claude-profiles/<backend>`), seed it (merge-only — your
-bypass-permissions preference, workspace trust, statusline, global `CLAUDE.md`,
-skills, and MCP servers follow you), export the backend's env vars and model pins,
-then `exec claude "$@"`. No daemons except where a backend needs a protocol proxy
-(Kiro, OpenAI, and Bedrock OpenAI). Nothing touches your main `~/.claude`.
+The backend launchers select an isolated profile in `~/.claude-profiles/<backend>`,
+call `bin/claude2all-profile.cjs`, export the backend environment and model pins,
+then execute Claude Code or the backend proxy. Kiro calls the separately installed
+`~/.local/bin/claude2kiro.exe`; `CLAUDE2KIRO_EXE` can select another binary path.
+The `.cmd` shims call the adjacent Bash launcher, which uses the same shared script.
+Nothing writes to the source `~/.claude`.
+
+## Perfiles: sincronización en cada lanzamiento
+
+`claude2kiro`, `claude2openai`, `claude2kimi` y `claude2bedrock` sincronizan las
+instrucciones antes de iniciar Claude Code. Bedrock cubre los perfiles `bedrock`
+y `bedrock-openai`. `claude2personal` y `claude2work` mantienen su seed propio.
+Los comandos de administración de OpenAI que no inician Claude Code conservan
+su paso directo al proxy.
+
+- `~/.claude/CLAUDE.md` sobrescribe el del perfil cuando cambia. Una edición en el
+  perfil se reemplaza en el próximo lanzamiento. Si el destino es un enlace de
+  archivo, se reemplaza el enlace por una copia sin escribir sobre su destino.
+- `~/.claude/skills` aporta archivos nuevos y actualizados, incluidas referencias
+  y archivos sueltos. Los enlaces y junctions existentes del perfil se conservan
+  sin recorrerlos. Los enlaces nuevos del origen se replican como enlaces con
+  destino absoluto; no se copian sus contenidos.
+- `.claude2all-sync.json` registra las copias. Si un archivo desaparece del origen,
+  se borra del perfil sólo si está registrado y conserva el hash de la copia.
+  Los directorios registrados se retiran sólo cuando quedan vacíos. Una copia
+  modificada localmente cuyo origen desapareció se conserva. En la primera
+  sincronización, los archivos antiguos sin equivalente en el origen se conservan
+  porque no se puede demostrar que fueran copias. Una fuente `skills` ausente
+  no dispara bajas.
+- El archivo opcional `<perfil>/skills.local` excluye skills completos de las
+  copias y bajas. Acepta un nombre de primer nivel por línea, espacios exteriores,
+  líneas vacías y comentarios que empiezan con `#`. No acepta rutas ni globs.
+
+Ejemplo de `~/.claude-profiles/kiro/skills.local`:
+
+```text
+# Skills mantenidos sólo en este perfil
+mi-skill-local
+```
+
+Onboarding, confianza del directorio actual y permisos se inicializan como antes.
+Settings conserva los valores del perfil y toma del global sólo las opciones
+seleccionadas que faltan. MCP combina servidores globales y locales; ante un
+nombre repetido gana el perfil. No sincroniza credenciales, historial ni sesiones.
+Un JSON inválido detiene el lanzamiento con el nombre del archivo, sin reemplazarlo.
+
+El script compara tamaño, mtime y ctime de origen y destino. Cuando cambian,
+compara SHA-256; sólo copia contenido diferente. Tampoco reescribe JSON idénticos.
+`install.sh` instala el script compartido antes de actualizar los launchers.
+Se necesita Node.js 18 o posterior y Git Bash en Windows.
+
+Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
+
+```bash
+CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2kimi
+CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2bedrock --openai
+node tests/profile-sync.cjs
+node tests/profile-sync.cjs "$HOME/.local/bin"
+```
+
+El modo seed realiza escrituras reales en el perfil indicado. Fuera de ese modo,
+los launchers usan su perfil de backend, sin heredar el perfil de la sesión padre.
+Las pruebas crean un HOME temporal dentro de `tests`, cambian una línea de
+`CLAUDE.md`, agregan skills y verifican ambos cambios con cada launcher Bash y
+cada `.cmd`. También prueban bajas, exclusiones, junctions y la segunda corrida
+sin escrituras. Imprimen la ruta de los fixtures para inspección y limpieza.
+
 
 ## Related
 

@@ -3,6 +3,7 @@
 # Bash launchers must stay LF or Git Bash breaks on the shebang line.
 install.sh text eol=lf
 bin/claude2all text eol=lf
+bin/claude2kiro text eol=lf
 bin/claude2kimi text eol=lf
 bin/claude2bedrock text eol=lf
 bin/claude2openai text eol=lf

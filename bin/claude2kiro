@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# claude2kiro: sync the isolated profile, then call the separately installed proxy.
+set -euo pipefail
+
+if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/kiro}" kiro
+  exit
+fi
+
+# Use an exact binary path; looking up claude2kiro would recurse into this wrapper.
+EXE="${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro.exe}"
+if [[ ! -x "$EXE" ]]; then
+  echo "claude2kiro: missing proxy binary: $EXE (install sgeraldes/claude2kiro or set CLAUDE2KIRO_EXE)" >&2
+  exit 1
+fi
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kiro"
+node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" kiro
+exec "$EXE" "$@"

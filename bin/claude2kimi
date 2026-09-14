@@ -4,6 +4,11 @@
 # so your regular claude / claude2kiro sessions are unaffected.
 set -euo pipefail
 
+if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/kimi}" kimi
+  exit
+fi
+
 CFG="$HOME/.claude2kimi/config"
 if [[ ! -f "$CFG" ]]; then
   echo "claude2kimi: missing config file: $CFG" >&2
@@ -23,29 +28,7 @@ WINDOW="${KIMI_CONTEXT_WINDOW:-1048576}"
 
 # Isolated profile: own settings, history, credentials — nothing leaks to ~/.claude.
 export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kimi"
-mkdir -p "$CLAUDE_CONFIG_DIR"
-
-# Seed the profile (merge-only, never clobbers): onboarding + Kimi third-party flag,
-# cwd trust, bypass-permissions default, selective settings mirror from the main
-# profile, global CLAUDE.md, custom skills, and MCP servers.
-node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1],home=process.env.HOME;
-const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
-j.hasCompletedOnboarding=true;
-j.penguinModeOrgEnabled=true;
-const cwd=process.cwd().replace(/\\/g,"/");
-(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
-let g={};try{g=JSON.parse(fs.readFileSync(home+"/.claude.json","utf8"))}catch(e){}
-if(g.mcpServers)j.mcpServers={...g.mcpServers,...(j.mcpServers||{})};
-fs.writeFileSync(jp,JSON.stringify(j,null,2));
-const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
-(s.permissions??={}).defaultMode??="bypassPermissions";
-s.skipDangerousModePermissionPrompt??=true;
-let m={};try{m=JSON.parse(fs.readFileSync(home+"/.claude/settings.json","utf8"))}catch(e){}
-for(const k of ["env","statusLine","theme","editorMode","verbose","promptSuggestionEnabled","autoCompactEnabled","skipWorkflowUsageWarning","teammateMode","askUserQuestionTimeout","inputNeededNotifEnabled","agentPushNotifEnabled","remoteControlAtStartup"])
-  if(s[k]===undefined&&m[k]!==undefined)s[k]=m[k];
-fs.writeFileSync(sp,JSON.stringify(s,null,2));
-const md=home+"/.claude/CLAUDE.md";if(fs.existsSync(md)&&!fs.existsSync(path.join(dir,"CLAUDE.md")))fs.copyFileSync(md,path.join(dir,"CLAUDE.md"));
-const sk=home+"/.claude/skills";if(fs.existsSync(sk)&&!fs.existsSync(path.join(dir,"skills")))fs.cpSync(sk,path.join(dir,"skills"),{recursive:true})' "$CLAUDE_CONFIG_DIR"
+node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" kimi
 
 # Official Kimi Code env vars for Claude Code.
 export ANTHROPIC_BASE_URL="$BASE_URL"
