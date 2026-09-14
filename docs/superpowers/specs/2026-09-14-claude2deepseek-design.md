@@ -42,7 +42,7 @@ The recipe above is DeepSeek's own Claude Code page; the launcher only wraps it.
   (`DEEPSEEK_API_KEY` required, placeholder rejected), `--model flash|pro|<id>` and
   `--effort low|medium|high|max` parsed before Claude Code sees the args (same shape as
   `claude2bedrock --openai`), profile `~/.claude-profiles/deepseek`, then the official env
-  block, then `exec` through `claude2all-timeout.cjs -- claude`.
+  block, then `exec claude "$@"`, the same last hop as `claude2kimi` and native `claude2bedrock`.
 - `bin/claude2deepseek.cmd`: the usual Git Bash shim.
 - `config/claude2deepseek.config.example`: every knob with the verified ids and the source.
 - `agents/deepseek.md`: delegation subagent; Flash by default, `--model pro` for hard work.
@@ -65,5 +65,6 @@ and does not retry.
 - Dry run with a fake `claude` on PATH: every exported variable checked for defaults,
   `--model pro`, raw ids, config overrides, and `--effort` precedence.
 - `tests/profile-sync.cjs` runs the new launcher in seed-only mode, Bash and `.cmd`.
-- Live: `claude2deepseek -p "Reply with exactly: DEEPSEEK SETUP OK"` and the same with
-  `--model pro`, once a key is in the config.
+- Live (done 2026-09-14): `claude2deepseek -p "Reply with exactly: DEEPSEEK SETUP OK"` answered in
+  about 10 s; `--model pro --effort high` completed a file-reading tool call in about 14 s; the
+  `.cmd` shim works from cmd.exe.

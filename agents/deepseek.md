@@ -30,7 +30,6 @@ Guidelines:
 - The working directory is inherited, so relative paths and project files work.
 - Flash is the default for delegated work; use `--model pro` for hard reasoning, design
   reviews, or bug hunting where the four-times price is worth it.
-- The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
 - For multi-step tasks add `--max-turns 30` to bound the run.
 - `--dangerously-skip-permissions` lets DeepSeek edit files and run commands; drop that flag
   if you only want read-only analysis (in `-p` mode any permission prompt is auto-denied).
