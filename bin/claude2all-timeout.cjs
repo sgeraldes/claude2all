@@ -11,9 +11,10 @@
 // run's process tree and ends the Claude Code processes in it (or the run
 // itself if Claude Code has not started yet). When the child closes, or when
 // the grace period ends, every recorded process still alive is force-ended,
-// the child included; a tree that arrives late is force-ended on arrival.
-// Nothing is inserted into the prompt or the output; a proxy server started
-// earlier by another session is not in this tree and is left alone.
+// the child included; a tree that arrives late is force-ended on arrival, and
+// a force that failed is retried once at the end. Nothing is inserted into the
+// prompt or the output, no diagnostic or log write can abort or delay the cut,
+// and a proxy server started earlier by another session is not in this tree.
 
 const { spawn, execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -23,13 +24,21 @@ const GRACE_MS = 20_000;
 const QUERY_TIMEOUT_MS = 15_000;
 const MAX_MINUTES = Math.floor(2_147_483_647 / 60_000); // setTimeout accepts at most 2^31 - 1 ms
 
+// A closed stderr (the reader went away) must not abort the supervisor.
+let stderrBroken = false;
+process.stderr.on('error', () => { stderrBroken = true; });
+function say(line) {
+  if (stderrBroken) return;
+  try { process.stderr.write(`${line}\n`); } catch { stderrBroken = true; }
+}
+
 const startedAt = Date.now();
 function trace(message) {
-  if (process.env.CLAUDE2ALL_DEBUG) process.stderr.write(`[claude2all +${((Date.now() - startedAt) / 1000).toFixed(1)}s] ${message}\n`);
+  if (process.env.CLAUDE2ALL_DEBUG) say(`[claude2all +${((Date.now() - startedAt) / 1000).toFixed(1)}s] ${message}`);
 }
 
 function fail(message) {
-  process.stderr.write(`claude2all: ${message}\n`);
+  say(`claude2all: ${message}`);
   process.exit(2);
 }
 
@@ -89,15 +98,17 @@ function parseArgs(argv, env = process.env) {
   };
 }
 
-// Run a helper command without blocking the event loop; resolve with its stdout,
-// or '' on failure or after QUERY_TIMEOUT_MS.
-function run(file, args) {
+// Run a helper command without blocking the event loop. Resolves with
+// { ok, stdout }; a failure or the QUERY_TIMEOUT_MS cap gives ok=false and ''.
+// `register` receives the ChildProcess so a caller can cancel it early.
+function run(file, args, register) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    execFile(file, args, { encoding: 'utf8', windowsHide: true, timeout: QUERY_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+    const proc = execFile(file, args, { encoding: 'utf8', windowsHide: true, timeout: QUERY_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
       trace(`${file} ${args.slice(0, 3).join(' ')} -> ${error ? `error ${error.code ?? ''}${error.killed ? ' (killed by cap)' : ''}` : 'ok'} in ${Date.now() - t0} ms`);
-      resolve(error ? '' : stdout);
+      resolve({ ok: !error, stdout: error ? '' : stdout });
     });
+    if (register) register(proc);
   });
 }
 
@@ -132,11 +143,12 @@ async function descendants(rootPid) {
     '}',
     'ConvertTo-Json -InputObject $found.ToArray() -Compress -Depth 3',
   ].join('; ');
-  const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
+  const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
   let parsed;
   try {
-    parsed = JSON.parse(out.trim() || '[]');
-  } catch {
+    parsed = JSON.parse(stdout.trim() || '[]');
+  } catch (error) {
+    trace(`tree query returned invalid JSON: ${error.message}`);
     return [];
   }
   const items = Array.isArray(parsed) ? parsed : [parsed];
@@ -149,22 +161,22 @@ function isClaude(p) {
   return /^claude(\.exe)?$/i.test(p.name) || /@anthropic-ai[\\/]claude-code/i.test(p.commandLine);
 }
 
-async function taskkill(pids, force) {
+// Ends each pid (with its own subtree). Resolves with the pids that were ended.
+async function taskkill(pids, force, register) {
   const flags = force ? ['/F', '/T'] : ['/T'];
-  await Promise.all([...new Set(pids)].map((pid) => run('taskkill.exe', [...flags, '/PID', String(pid)])));
+  const unique = [...new Set(pids)];
+  const results = await Promise.all(unique.map((pid) => run('taskkill.exe', [...flags, '/PID', String(pid)], register)));
+  return unique.filter((pid, index) => results[index].ok);
 }
 
-// Writing the log must never stop the termination sequence.
+// Appends to the run log off the event loop; never throws, never awaited by the
+// cut. CLAUDE2ALL_RUN_LOG must already be a regular file.
 function appendTimeoutLog(line, env = process.env) {
   const logPath = env.CLAUDE2ALL_RUN_LOG;
-  if (!logPath) return false;
-  try {
-    if (!fs.statSync(logPath).isFile()) return false;
-    fs.appendFileSync(logPath, `${line}\n`);
-    return true;
-  } catch {
-    return false;
-  }
+  if (!logPath) return Promise.resolve(false);
+  return fs.promises.stat(logPath)
+    .then((info) => (info.isFile() ? fs.promises.appendFile(logPath, `${line}\n`).then(() => true) : false))
+    .catch((error) => { trace(`run log skipped: ${error.message}`); return false; });
 }
 
 function isShellScript(file) {
@@ -230,14 +242,17 @@ async function main() {
 
   // Windows termination. The force deadline is armed before any query, so a slow
   // PowerShell or a slow graceful step can only make the graceful step late, never
-  // the force. A tree that arrives once forcing has begun is force-ended at once.
+  // the force. A tree that arrives once forcing has begun is force-ended at once;
+  // pids whose force failed are retried once in the final sweep.
   async function stopWindows() {
     let forcing = false;
     const forced = new Set();
+    const gracefulProcs = new Set();
     const forceAll = async (pids) => {
       const fresh = pids.filter((pid) => !forced.has(pid));
-      fresh.forEach((pid) => forced.add(pid));
-      if (fresh.length > 0) await taskkill(fresh, true);
+      if (fresh.length === 0) return;
+      const ended = await taskkill(fresh, true);
+      ended.forEach((pid) => forced.add(pid));
     };
 
     trace('stop: querying tree');
@@ -252,7 +267,7 @@ async function main() {
         return;
       }
       const claude = tree.filter(isClaude).map((p) => p.pid);
-      await taskkill(claude.length > 0 ? claude : [child.pid], false);
+      await taskkill(claude.length > 0 ? claude : [child.pid], false, (proc) => gracefulProcs.add(proc));
     });
 
     const grace = cancellableDelay(GRACE_MS);
@@ -262,13 +277,15 @@ async function main() {
       grace.cancel();
     }
     forcing = true;
+    for (const proc of gracefulProcs) { try { proc.kill(); } catch { /* already gone */ } }
     trace(`grace over or child closed (closed=${closed}); forcing`);
     const known = await Promise.race([treePromise, Promise.resolve(null)]);
     await forceAll([child.pid, ...(known || []).map((p) => p.pid)]);
     // If the query was still pending, wait for it (capped); its arrival forces the rest.
     const tree = await treePromise;
     await graceful.catch(() => {});
-    await forceAll(tree.map((p) => p.pid));
+    // Final sweep: anything not confirmed ended gets one more attempt.
+    await forceAll([child.pid, ...tree.map((p) => p.pid)]);
     trace('stop: done');
   }
 
@@ -291,9 +308,9 @@ async function main() {
   if (timeoutMs !== undefined) {
     timeoutTimer = setTimeout(() => {
       timedOut = true;
-      stop(); // before any I/O: nothing may delay the termination
+      stop(); // first: no diagnostic or log write may delay the termination
       const line = `[claude2all] TIEMPO AGOTADO: ${minutes} min, corrida cortada`;
-      process.stderr.write(`${line}\n`);
+      say(line);
       appendTimeoutLog(line);
     }, timeoutMs);
     timeoutTimer.unref();
@@ -325,7 +342,7 @@ if (require.main === module) {
   main().then((code) => {
     process.exitCode = code;
   }).catch((error) => {
-    process.stderr.write(`claude2all: unable to start child process: ${error.message}\n`);
+    say(`claude2all: unable to start child process: ${error.message}`);
     process.exitCode = 1;
   });
 }

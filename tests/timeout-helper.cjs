@@ -125,12 +125,22 @@ async function main() {
 
   // The run log must never break the termination sequence.
   const { appendTimeoutLog } = require('../bin/claude2all-timeout.cjs');
-  assert.equal(appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: root }), false, 'a directory is not a log file');
-  assert.equal(appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: path.join(root, 'missing.log') }), false, 'a missing file is skipped');
+  assert.equal(await appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: root }), false, 'a directory is not a log file');
+  assert.equal(await appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: path.join(root, 'missing.log') }), false, 'a missing file is skipped');
+  assert.equal(await appendTimeoutLog('x', {}), false, 'unset means no log');
   const logFile = write('run.log', ['start']);
-  assert.equal(appendTimeoutLog('cut', { CLAUDE2ALL_RUN_LOG: logFile }), true);
+  assert.equal(await appendTimeoutLog('cut', { CLAUDE2ALL_RUN_LOG: logFile }), true);
   assert.match(fs.readFileSync(logFile, 'utf8'), /cut\n$/);
-  console.log('PASS run log: appended when it is a file, ignored otherwise');
+  console.log('PASS run log: appended when it is a file, ignored otherwise, never throws');
+
+  // A closed stderr must not abort the supervisor: the child still runs to completion.
+  const quiet = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [helper, '--', exit0, '-p', 'x', '--max-minutes', '1'], { env: baseEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stderr.destroy(); // reader goes away immediately
+    child.once('close', (code) => resolve(code));
+  });
+  assert.equal(quiet, 0, 'the helper must survive a closed stderr');
+  console.log('PASS a closed stderr does not abort the helper');
 
   // The limit ends a run whose Claude Code never started: the child tree itself is stopped.
   // The script name carries the fixture's random suffix, so a concurrent run of this
