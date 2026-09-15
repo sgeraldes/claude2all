@@ -110,10 +110,27 @@ async function main() {
     assert.deepEqual(await descendants(leaf.pid), [], 'a leaf has no descendants');
     assert.ok(Date.now() - startedAt < 15_000, 'a leaf query must return promptly');
     assert.deepEqual(await descendants(0), []);
+    // A command line with line breaks and a bare number must not fabricate a record.
+    const tricky = spawn('C:\\Program Files\\Git\\bin\\bash.exe', ['-c', 'x=1\n99999999\nsleep 30'], { stdio: 'ignore' });
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const trickyTree = await descendants(tricky.pid);
+    assert.ok(trickyTree.length >= 1, 'the tricky tree must still be found');
+    assert.ok(!trickyTree.some((p) => p.pid === 99999999), 'a number inside a command line is not a pid');
+    assert.ok(trickyTree.every((p) => Number.isInteger(p.pid) && typeof p.name === 'string'), 'records are well formed');
     spawnSync('taskkill.exe', ['/F', '/T', '/PID', String(pair.pid)], { stdio: 'ignore' });
+    spawnSync('taskkill.exe', ['/F', '/T', '/PID', String(tricky.pid)], { stdio: 'ignore' });
     leaf.kill();
-    console.log('PASS tree query: bash -> sleep found, leaf empty, caller excluded');
+    console.log('PASS tree query: bash -> sleep found, leaf empty, caller excluded, multi-line command lines safe');
   }
+
+  // The run log must never break the termination sequence.
+  const { appendTimeoutLog } = require('../bin/claude2all-timeout.cjs');
+  assert.equal(appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: root }), false, 'a directory is not a log file');
+  assert.equal(appendTimeoutLog('x', { CLAUDE2ALL_RUN_LOG: path.join(root, 'missing.log') }), false, 'a missing file is skipped');
+  const logFile = write('run.log', ['start']);
+  assert.equal(appendTimeoutLog('cut', { CLAUDE2ALL_RUN_LOG: logFile }), true);
+  assert.match(fs.readFileSync(logFile, 'utf8'), /cut\n$/);
+  console.log('PASS run log: appended when it is a file, ignored otherwise');
 
   // The limit ends a run whose Claude Code never started: the child tree itself is stopped.
   // The script name carries the fixture's random suffix, so a concurrent run of this

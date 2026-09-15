@@ -11,9 +11,9 @@
 // run's process tree and ends the Claude Code processes in it (or the run
 // itself if Claude Code has not started yet). When the child closes, or when
 // the grace period ends, every recorded process still alive is force-ended,
-// the child included. Nothing is inserted into the prompt or the output; a
-// proxy server started earlier by another session is not in this tree and is
-// left alone.
+// the child included; a tree that arrives late is force-ended on arrival.
+// Nothing is inserted into the prompt or the output; a proxy server started
+// earlier by another session is not in this tree and is left alone.
 
 const { spawn, execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -104,6 +104,8 @@ function run(file, args) {
 // Windows: every process below rootPid, found by walking parent links. The pid
 // is embedded in the script (arguments after -Command are not bound to $args);
 // missing keys, null entries and revisits are skipped so a leaf yields nothing.
+// The result is one JSON document, so a command line containing line breaks
+// can never be mistaken for another record.
 async function descendants(rootPid) {
   if (!Number.isInteger(rootPid) || rootPid <= 0) return [];
   const script = [
@@ -112,6 +114,7 @@ async function descendants(rootPid) {
     '$byParent = @{}',
     'foreach ($p in $all) { if ($null -eq $p.ProcessId) { continue }; $k = [string]$p.ParentProcessId; if (-not $byParent.ContainsKey($k)) { $byParent[$k] = New-Object System.Collections.ArrayList }; [void]$byParent[$k].Add($p) }',
     '$seen = @{}',
+    '$found = New-Object System.Collections.ArrayList',
     '$queue = New-Object System.Collections.Queue',
     '$queue.Enqueue($root)',
     'while ($queue.Count -gt 0) {',
@@ -123,16 +126,23 @@ async function descendants(rootPid) {
     '    $pid2 = [int]$c.ProcessId',
     '    if ($pid2 -le 0 -or $pid2 -eq $root -or $seen.ContainsKey($pid2)) { continue }',
     '    $seen[$pid2] = $true',
-    '    "{0}`t{1}`t{2}" -f $pid2, $c.Name, $c.CommandLine',
+    '    [void]$found.Add([pscustomobject]@{ pid = $pid2; name = [string]$c.Name; cmd = [string]$c.CommandLine })',
     '    $queue.Enqueue($pid2)',
     '  }',
     '}',
+    'ConvertTo-Json -InputObject $found.ToArray() -Compress -Depth 3',
   ].join('; ');
   const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
-  return out.split(/\r?\n/).filter(Boolean).map((line) => {
-    const [pid, name = '', commandLine = ''] = line.split('\t');
-    return { pid: Number(pid), name, commandLine };
-  }).filter((p) => Number.isInteger(p.pid) && p.pid > 0 && p.pid !== rootPid);
+  let parsed;
+  try {
+    parsed = JSON.parse(out.trim() || '[]');
+  } catch {
+    return [];
+  }
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+  return items
+    .filter((p) => p && Number.isInteger(p.pid) && p.pid > 0 && p.pid !== rootPid)
+    .map((p) => ({ pid: p.pid, name: typeof p.name === 'string' ? p.name : '', commandLine: typeof p.cmd === 'string' ? p.cmd : '' }));
 }
 
 function isClaude(p) {
@@ -144,12 +154,17 @@ async function taskkill(pids, force) {
   await Promise.all([...new Set(pids)].map((pid) => run('taskkill.exe', [...flags, '/PID', String(pid)])));
 }
 
-function appendTimeoutLog(line) {
-  const logPath = process.env.CLAUDE2ALL_RUN_LOG;
-  if (!logPath || !fs.existsSync(logPath)) {
-    return;
+// Writing the log must never stop the termination sequence.
+function appendTimeoutLog(line, env = process.env) {
+  const logPath = env.CLAUDE2ALL_RUN_LOG;
+  if (!logPath) return false;
+  try {
+    if (!fs.statSync(logPath).isFile()) return false;
+    fs.appendFileSync(logPath, `${line}\n`);
+    return true;
+  } catch {
+    return false;
   }
-  fs.appendFileSync(logPath, `${line}\n`);
 }
 
 function isShellScript(file) {
@@ -183,8 +198,12 @@ function spawnPlan(command, args) {
   return { file: command, args };
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// A delay whose timer can be cancelled, so a losing grace timer does not keep
+// the process alive after the child has closed.
+function cancellableDelay(ms) {
+  let timer;
+  const promise = new Promise((resolve) => { timer = setTimeout(resolve, ms); });
+  return { promise, cancel: () => clearTimeout(timer) };
 }
 
 async function main() {
@@ -210,29 +229,57 @@ async function main() {
   const untilClosed = new Promise((resolve) => child.once('close', resolve));
 
   // Windows termination. The force deadline is armed before any query, so a slow
-  // PowerShell or taskkill can only make the graceful step late, never the force.
+  // PowerShell or a slow graceful step can only make the graceful step late, never
+  // the force. A tree that arrives once forcing has begun is force-ended at once.
   async function stopWindows() {
+    let forcing = false;
+    const forced = new Set();
+    const forceAll = async (pids) => {
+      const fresh = pids.filter((pid) => !forced.has(pid));
+      fresh.forEach((pid) => forced.add(pid));
+      if (fresh.length > 0) await taskkill(fresh, true);
+    };
+
     trace('stop: querying tree');
-    const treePromise = descendants(child.pid).then((tree) => { trace(`tree: ${tree.map((p) => `${p.pid}:${p.name}`).join(' ') || '(empty)'}`); return tree; });
-    const graceful = treePromise.then((tree) => {
-      const claude = tree.filter(isClaude).map((p) => p.pid);
-      return taskkill(claude.length > 0 ? claude : [child.pid], false);
+    const treePromise = descendants(child.pid).then((tree) => {
+      trace(`tree: ${tree.map((p) => `${p.pid}:${p.name}`).join(' ') || '(empty)'}`);
+      return tree;
     });
-    await Promise.race([untilClosed, delay(GRACE_MS)]);
+    const graceful = treePromise.then(async (tree) => {
+      if (forcing) {
+        trace('tree arrived while forcing; forcing descendants');
+        await forceAll(tree.map((p) => p.pid));
+        return;
+      }
+      const claude = tree.filter(isClaude).map((p) => p.pid);
+      await taskkill(claude.length > 0 ? claude : [child.pid], false);
+    });
+
+    const grace = cancellableDelay(GRACE_MS);
+    try {
+      await Promise.race([untilClosed, grace.promise]);
+    } finally {
+      grace.cancel();
+    }
+    forcing = true;
     trace(`grace over or child closed (closed=${closed}); forcing`);
-    // Force whatever we know about right now; the child itself always included.
     const known = await Promise.race([treePromise, Promise.resolve(null)]);
-    await taskkill([child.pid, ...(known || []).map((p) => p.pid)], true);
-    // If the tree query was still pending, finish it (capped) and sweep once more.
+    await forceAll([child.pid, ...(known || []).map((p) => p.pid)]);
+    // If the query was still pending, wait for it (capped); its arrival forces the rest.
     const tree = await treePromise;
     await graceful.catch(() => {});
-    await taskkill(tree.map((p) => p.pid), true);
+    await forceAll(tree.map((p) => p.pid));
     trace('stop: done');
   }
 
   async function stopPosix() {
     try { process.kill(-child.pid, 'SIGTERM'); } catch { /* already gone */ }
-    await Promise.race([untilClosed, delay(GRACE_MS)]);
+    const grace = cancellableDelay(GRACE_MS);
+    try {
+      await Promise.race([untilClosed, grace.promise]);
+    } finally {
+      grace.cancel();
+    }
     try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
   }
 
@@ -244,10 +291,10 @@ async function main() {
   if (timeoutMs !== undefined) {
     timeoutTimer = setTimeout(() => {
       timedOut = true;
+      stop(); // before any I/O: nothing may delay the termination
       const line = `[claude2all] TIEMPO AGOTADO: ${minutes} min, corrida cortada`;
       process.stderr.write(`${line}\n`);
       appendTimeoutLog(line);
-      stop();
     }, timeoutMs);
     timeoutTimer.unref();
   }
@@ -283,4 +330,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { descendants, isClaude, parseArgs, spawnPlan };
+module.exports = { descendants, isClaude, parseArgs, spawnPlan, appendTimeoutLog };
