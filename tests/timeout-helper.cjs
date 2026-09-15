@@ -11,11 +11,17 @@ const path = require('node:path');
 const helper = path.resolve(__dirname, '../bin/claude2all-timeout.cjs');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'claude2all-timeout-test-'));
 
+// The suite may itself run under a launcher; start from an environment without
+// the guard or a session-wide limit, then apply each case's own values.
+const baseEnv = { ...process.env };
+delete baseEnv.CLAUDE2ALL_TIMEOUT_ACTIVE;
+delete baseEnv.CLAUDE2_MAX_MINUTES;
+
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
     const child = spawn(process.execPath, [helper, '--', ...args], {
-      env: { ...process.env, ...env },
+      env: { ...baseEnv, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -88,8 +94,31 @@ async function main() {
     console.log('PASS command classification: .cmd via cmd.exe, #! via Git Bash, .exe directly');
   }
 
+  if (process.platform === 'win32') {
+    // The tree query returns exactly the run's descendants: a bash -> sleep pair, and
+    // nothing for a leaf; an unrelated process (this test) is never included.
+    const { descendants } = require('../bin/claude2all-timeout.cjs');
+    const pair = spawn('C:\\Program Files\\Git\\bin\\bash.exe', ['-c', 'sleep 30'], { stdio: 'ignore' });
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const tree = await descendants(pair.pid);
+    assert.ok(tree.length >= 1, `expected at least the sleep process, got ${JSON.stringify(tree)}`);
+    assert.ok(tree.some((p) => /sleep/i.test(p.name) || /sleep 30/.test(p.commandLine)), `sleep not found in ${JSON.stringify(tree)}`);
+    assert.ok(!tree.some((p) => p.pid === process.pid || p.pid === pair.pid), 'the query must not include the caller or the root itself');
+    const leaf = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { stdio: 'ignore' });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const startedAt = Date.now();
+    assert.deepEqual(await descendants(leaf.pid), [], 'a leaf has no descendants');
+    assert.ok(Date.now() - startedAt < 15_000, 'a leaf query must return promptly');
+    assert.deepEqual(await descendants(0), []);
+    spawnSync('taskkill.exe', ['/F', '/T', '/PID', String(pair.pid)], { stdio: 'ignore' });
+    leaf.kill();
+    console.log('PASS tree query: bash -> sleep found, leaf empty, caller excluded');
+  }
+
   // The limit ends a run whose Claude Code never started: the child tree itself is stopped.
-  const sleeper = write('sleeper.sh', ['#!/usr/bin/env bash', 'while true; do sleep 1; done'], 0o755);
+  // The script name carries the fixture's random suffix, so a concurrent run of this
+  // suite (another session) cannot be mistaken for a survivor of this one.
+  const sleeper = write(`sleeper-${path.basename(root)}.sh`, ['#!/usr/bin/env bash', 'while true; do sleep 1; done'], 0o755);
   const timeout = await run([sleeper, '-p', 'never answers', '--max-minutes', '1']);
   assert.equal(timeout.code, 124, timeout.stderr);
   assert.match(timeout.stderr, /TIEMPO AGOTADO: 1 min, corrida cortada/);

@@ -18,9 +18,17 @@ if [[ ! -x "$EXE" ]]; then
   exit 1
 fi
 
+# A Bedrock selection inherited from a `claude2bedrock --openai` session would make
+# the proxy bill AWS instead of the ChatGPT subscription; this launcher is Codex only,
+# for `run` and for the management subcommands alike.
+unset BEDROCK_OPENAI BEDROCK_MODEL BEDROCK_SMALL_MODEL BEDROCK_EFFORT
+
 # Pass proxy-management subcommands straight through (no Claude Code involved).
 case "${1:-}" in
-  server|test|help|--help|-h)
+  server|test)
+    exec "$EXE" --backend codex "$@"
+    ;;
+  help|--help|-h)
     exec "$EXE" "$@"
     ;;
 esac
@@ -56,9 +64,6 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU_MODEL"
 export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT_MODEL"
 
 unset ANTHROPIC_API_KEY  # conflicts with the proxy's bearer token if left over from other setups
-# A Bedrock selection inherited from a `claude2bedrock --openai` session would make
-# the proxy bill AWS instead of the ChatGPT subscription; this launcher is Codex only.
-unset BEDROCK_OPENAI BEDROCK_MODEL BEDROCK_SMALL_MODEL BEDROCK_EFFORT
 
 # Call the binary by exact path: a bare `claude2openai` via PATH would resolve
 # back to THIS wrapper script (same name) and recurse forever.

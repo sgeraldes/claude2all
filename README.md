@@ -196,7 +196,8 @@ launcher hace lo mismo. Tienen tope `claude2kiro`, `claude2openai` y `claude2bed
 (ambos modos); `claude2kimi`, `claude2personal` y `claude2work` no pasan por el helper.
 La variable `CLAUDE2ALL_TIMEOUT_ACTIVE` sólo vive entre el helper y el launcher que lo
 llamó; Claude Code y los proxies no la heredan, así que un launcher anidado recibe su
-propio tope.
+propio tope. Con `CLAUDE2ALL_DEBUG=1` el helper escribe en stderr cada fase del corte con
+su tiempo (consulta del árbol, cierre, gracia, fuerza).
 
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 
