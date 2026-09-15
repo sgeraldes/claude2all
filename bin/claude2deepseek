@@ -74,8 +74,9 @@ WINDOW="${DEEPSEEK_CONTEXT_WINDOW:-1048576}"
 export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/deepseek"
 node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" deepseek
 
-# A leftover selector from another launcher would route past DeepSeek entirely.
-unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+# A leftover selector from another launcher would route past DeepSeek entirely, and a
+# clock-limit guard inherited from a parent launcher session must not reach Claude Code.
+unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE2ALL_TIMEOUT_ACTIVE
 
 # Official DeepSeek recipe for Claude Code (api-docs.deepseek.com, agent integrations).
 export ANTHROPIC_BASE_URL="$BASE_URL"

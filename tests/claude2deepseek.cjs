@@ -24,7 +24,7 @@ const tracked = [
   'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
   'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_EFFORT_LEVEL',
   'CLAUDE_CODE_AUTO_COMPACT_WINDOW', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS', 'CLAUDE_CONFIG_DIR',
-  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE2ALL_TIMEOUT_ACTIVE',
 ];
 fs.writeFileSync(path.join(fakeBin, 'claude'), [
   '#!/usr/bin/env bash',
@@ -116,13 +116,14 @@ assert.deepEqual(r.args, ['--', '--model', 'pro', '-p', 'literal']);
 assert.equal(r.env.ANTHROPIC_MODEL, 'deepseek-flash[1m]');
 console.log('PASS -- ends option parsing and everything after it is forwarded literally');
 
-r = run(configured, ['-p', 'x'], { CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CODE_USE_VERTEX: '1', CLAUDE_CODE_USE_FOUNDRY: '1', ANTHROPIC_API_KEY: 'stale' });
+r = run(configured, ['-p', 'x'], { CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CODE_USE_VERTEX: '1', CLAUDE_CODE_USE_FOUNDRY: '1', ANTHROPIC_API_KEY: 'stale', CLAUDE2ALL_TIMEOUT_ACTIVE: '1' });
 assert.equal(r.status, 0, r.stderr);
 assert.equal(r.env.CLAUDE_CODE_USE_BEDROCK, '<unset>');
 assert.equal(r.env.CLAUDE_CODE_USE_VERTEX, '<unset>');
 assert.equal(r.env.CLAUDE_CODE_USE_FOUNDRY, '<unset>');
 assert.equal(r.env.ANTHROPIC_API_KEY, '<unset>');
-console.log('PASS leftover provider selectors and ANTHROPIC_API_KEY are cleared');
+assert.equal(r.env.CLAUDE2ALL_TIMEOUT_ACTIVE, '<unset>');
+console.log('PASS leftover provider selectors, ANTHROPIC_API_KEY and the clock-limit guard are cleared');
 
 for (const [args, code, message] of [
   [['--model'], 2, /--model requires/],
