@@ -135,7 +135,8 @@ call `bin/claude2all-profile.cjs`, export the backend environment and model pins
 then execute Claude Code or the backend proxy. Kiro calls the separately installed
 `~/.local/bin/claude2kiro.exe`; `CLAUDE2KIRO_EXE` can select another binary path.
 The `.cmd` shims call the adjacent Bash launcher, which uses the same shared script.
-Nothing writes to the source `~/.claude`.
+The launchers write nothing to the source `~/.claude`; only `install.sh` adds the
+subagents under `~/.claude/agents`.
 
 ## Perfiles: sincronización en cada lanzamiento
 
@@ -178,8 +179,37 @@ Un JSON inválido detiene el lanzamiento con el nombre del archivo, sin reemplaz
 
 El script compara tamaño, mtime y ctime de origen y destino. Cuando cambian,
 compara SHA-256; sólo copia contenido diferente. Tampoco reescribe JSON idénticos.
-`install.sh` instala el script compartido antes de actualizar los launchers.
+`install.sh` instala los scripts compartidos antes de actualizar los launchers.
 Se necesita Node.js 18 o posterior y Git Bash en Windows.
+
+### Tope por reloj
+
+Las corridas headless (`-p`) tienen un tope de 90 minutos por defecto. Las sesiones
+interactivas no tienen tope. Se puede cambiar por corrida o para el entorno:
+
+```bash
+claude2bedrock --openai --model luna --effort low --max-minutes 45 -p "despliega y verifica"
+CLAUDE2_MAX_MINUTES=30 claude2kiro remote -p "revisa este diff"
+```
+
+`--max-minutes <n>` y `CLAUDE2_MAX_MINUTES` requieren un entero positivo; el flag
+prevalece sobre la variable. Al llegar al límite, el launcher termina sólo los
+procesos de la corrida de Claude Code, espera hasta 20 segundos y fuerza el cierre si
+siguen vivos. Escribe
+`[claude2all] TIEMPO AGOTADO: <n> min, corrida cortada` en stderr y en
+`CLAUDE2ALL_RUN_LOG` cuando ese archivo existe, y devuelve el código 124. Los comandos
+administrativos y los procesos `server` no se supervisan, por lo que un `remote` con
+tope nunca detiene un proxy compartido.
+
+El helper no agrega texto al prompt ni filtra la salida. Al vencer, busca los procesos
+de Claude Code que descienden de la corrida y los termina; si Claude Code todavía no
+arrancó (login SSO, arranque del proxy), termina la corrida misma. Ctrl-C sobre el
+launcher hace lo mismo. Tienen tope `claude2kiro`, `claude2openai` y `claude2bedrock`
+(ambos modos); `claude2kimi`, `claude2personal` y `claude2work` no pasan por el helper.
+La variable `CLAUDE2ALL_TIMEOUT_ACTIVE` sólo vive entre el helper y el launcher que lo
+llamó; Claude Code y los proxies no la heredan, así que un launcher anidado recibe su
+propio tope. Con `CLAUDE2ALL_DEBUG=1` el helper escribe en stderr cada fase del corte con
+su tiempo (consulta del árbol, cierre, gracia, fuerza).
 
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 

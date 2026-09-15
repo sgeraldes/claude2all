@@ -29,6 +29,7 @@ Guidelines:
 - The working directory is inherited, so relative paths and project files work.
 - Drop `--dangerously-skip-permissions` if you only want read-only analysis (in `-p`
   mode any permission prompt is auto-denied).
+- The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
 - For multi-step tasks add `--max-turns 30` to bound the run.
 - If SSO expires, run `aws sso login --sso-session dfx5`, then retry.
 - OpenAI mode uses its own profile at `~/.claude-profiles/bedrock-openai`; native

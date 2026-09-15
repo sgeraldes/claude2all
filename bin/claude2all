@@ -37,7 +37,7 @@ st_deepseek() { # the effective value must be non-empty and not the placeholder 
 }
 st_bedrock()  { [[ -f "$HOME/.claude2bedrock/config" ]] && ! grep -q 'your-aws-sso-profile' "$HOME/.claude2bedrock/config"; }
 st_openai()   { [[ -x "$HOME/.claude2openai/claude2openai.exe" && -f "$HOME/.codex/auth.json" ]]; }
-st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro.exe}" ]]; }
+st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro-proxy.exe}" || -x "$HOME/.local/bin/claude2kiro.exe" ]]; }
 st_personal() { [[ -f "$HOME/.claude/.credentials.json" || -f "$HOME/.claude-profiles/personal/.credentials.json" ]]; }
 st_work()     { [[ -f "$HOME/.claude-profiles/work/.credentials.json" ]]; }
 

@@ -26,6 +26,14 @@ BASE_URL="${KIMI_BASE_URL:-https://api.kimi.com/coding/}"
 MODEL="${KIMI_MODEL:-k3[1m]}"
 WINDOW="${KIMI_CONTEXT_WINDOW:-1048576}"
 
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+
+# This launcher has no clock limit, but a guard inherited from a parent launcher
+# session must not reach Claude Code, or a nested launcher would skip its own limit.
+unset CLAUDE2ALL_TIMEOUT_ACTIVE
+
 # Isolated profile: own settings, history, credentials — nothing leaks to ~/.claude.
 export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kimi"
 node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" kimi

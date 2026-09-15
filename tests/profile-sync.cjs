@@ -110,6 +110,15 @@ syncProfile(linkedProfile, 'kiro', home);
 assert.deepEqual(fs.readdirSync(path.join(root, 'outside')), ['SKILL.md']);
 console.log('PASS junction del origen, copia convertida en enlace y raíz skills enlazada');
 
+if (process.platform === 'win32') {
+  put('home/.claude/skills/casey/SKILL.md', 'Case\n');
+  syncProfile(profile, 'kiro', home);
+  fs.renameSync(path.join(home, '.claude/skills/casey'), path.join(home, '.claude/skills/CASEY'));
+  const renamed = syncProfile(profile, 'kiro', home);
+  assert.equal(renamed.removed, 0, 'a case-only rename must not prune the copy');
+  assert.equal(read('profile/skills/CASEY/SKILL.md'), 'Case\n');
+  console.log('PASS renombre sólo de mayúsculas: la copia se conserva');
+}
 fs.renameSync(path.join(home, '.claude/skills'), path.join(root, 'source-skills-unavailable'));
 assert.equal(syncProfile(profile, 'kiro', home).removed, 0);
 assert.equal(read('profile/skills/humanizer/SKILL.md'), 'Original\n');
