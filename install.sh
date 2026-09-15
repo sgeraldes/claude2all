@@ -17,6 +17,12 @@ for f in bin/claude2*; do
   [[ "$f" == *.cmd ]] || chmod +x "$HOME/.local/bin/$(basename "$f")"
   echo "    $(basename "$f")"
 done
+# The Kiro proxy ships as claude2kiro.exe; next to the claude2kiro.cmd shim PowerShell
+# would run the .exe first and skip profile sync and the clock limit. Rename it.
+if [[ -f "$HOME/.local/bin/claude2kiro.exe" ]]; then
+  node -e 'const fs=require("fs");fs.renameSync(process.argv[1],process.argv[2])' "$HOME/.local/bin/claude2kiro.exe" "$HOME/.local/bin/claude2kiro-proxy.exe"
+  echo "    claude2kiro.exe -> claude2kiro-proxy.exe (the launcher finds it there)"
+fi
 
 echo "==> Installing subagents to ~/.claude/agents"
 mkdir -p "$HOME/.claude/agents"

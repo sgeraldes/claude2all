@@ -139,11 +139,14 @@ function syncProfile(dir, backend, home = process.env.HOME || os.homedir()) {
       fs.mkdirSync(targetSkills, { recursive: true });
       for (const name of fs.readdirSync(sourceSkills)) mirror(path.join(sourceSkills, name), path.join(targetSkills, name), name);
       // Only delete recorded copies. Never traverse a profile link or delete local skills.
+      // On Windows the comparison is case-insensitive: a case-only rename in the
+      // source is the same file on disk, not a copy to prune.
+      const nextKeys = new Set(Object.keys(next).map(skillKey));
       for (const relative of Object.keys(owned).sort((a, b) => b.split('/').length - a.split('/').length)) {
         if (relative.split('/').some(part => !part || part === '.' || part === '..') || /[\\:]/.test(relative)) {
           throw new Error(`Invalid path in ${statePath}: ${relative}`);
         }
-        if (next[relative] || protectedPath(relative) || [...skipped].some(link => relative === link || relative.startsWith(`${link}/`))) continue;
+        if (nextKeys.has(skillKey(relative)) || protectedPath(relative) || [...skipped].some(link => relative === link || relative.startsWith(`${link}/`))) continue;
         const to = path.join(targetSkills, relative);
         const dst = stat(to);
         if (!dst) continue;

@@ -28,6 +28,7 @@ esac
 if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
   exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
 fi
+unset CLAUDE2ALL_TIMEOUT_ACTIVE  # consumed here; a nested launcher must get its own limit
 
 # Everything else runs Claude Code through the proxy. Strip a leading explicit
 # `run` so `claude2openai run ...` and `claude2openai ...` behave the same.
@@ -55,7 +56,10 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU_MODEL"
 export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT_MODEL"
 
 unset ANTHROPIC_API_KEY  # conflicts with the proxy's bearer token if left over from other setups
+# A Bedrock selection inherited from a `claude2bedrock --openai` session would make
+# the proxy bill AWS instead of the ChatGPT subscription; this launcher is Codex only.
+unset BEDROCK_OPENAI BEDROCK_MODEL BEDROCK_SMALL_MODEL BEDROCK_EFFORT
 
 # Call the binary by exact path: a bare `claude2openai` via PATH would resolve
 # back to THIS wrapper script (same name) and recurse forever.
-exec "$EXE" run "$@"
+exec "$EXE" --backend codex run "$@"

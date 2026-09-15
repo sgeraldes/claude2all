@@ -123,7 +123,8 @@ call `bin/claude2all-profile.cjs`, export the backend environment and model pins
 then execute Claude Code or the backend proxy. Kiro calls the separately installed
 `~/.local/bin/claude2kiro.exe`; `CLAUDE2KIRO_EXE` can select another binary path.
 The `.cmd` shims call the adjacent Bash launcher, which uses the same shared script.
-Nothing writes to the source `~/.claude`.
+The launchers write nothing to the source `~/.claude`; only `install.sh` adds the
+subagents under `~/.claude/agents`.
 
 ## Perfiles: sincronización en cada lanzamiento
 
@@ -187,6 +188,15 @@ siguen vivos. Escribe
 `CLAUDE2ALL_RUN_LOG` cuando ese archivo existe, y devuelve el código 124. Los comandos
 administrativos y los procesos `server` no se supervisan, por lo que un `remote` con
 tope nunca detiene un proxy compartido.
+
+El helper no agrega texto al prompt ni filtra la salida. Al vencer, busca los procesos
+de Claude Code que descienden de la corrida y los termina; si Claude Code todavía no
+arrancó (login SSO, arranque del proxy), termina la corrida misma. Ctrl-C sobre el
+launcher hace lo mismo. Tienen tope `claude2kiro`, `claude2openai` y `claude2bedrock`
+(ambos modos); `claude2kimi`, `claude2personal` y `claude2work` no pasan por el helper.
+La variable `CLAUDE2ALL_TIMEOUT_ACTIVE` sólo vive entre el helper y el launcher que lo
+llamó; Claude Code y los proxies no la heredan, así que un launcher anidado recibe su
+propio tope.
 
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 

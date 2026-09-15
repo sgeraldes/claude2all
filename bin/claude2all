@@ -31,7 +31,7 @@ interactive() { [[ -t 0 && -t 1 ]]; }
 st_kimi()     { [[ -f "$HOME/.claude2kimi/config" ]] && ! grep -q 'paste-your-kimi-code-api-key-here' "$HOME/.claude2kimi/config"; }
 st_bedrock()  { [[ -f "$HOME/.claude2bedrock/config" ]] && ! grep -q 'your-aws-sso-profile' "$HOME/.claude2bedrock/config"; }
 st_openai()   { [[ -x "$HOME/.claude2openai/claude2openai.exe" && -f "$HOME/.codex/auth.json" ]]; }
-st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro.exe}" ]]; }
+st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro-proxy.exe}" || -x "$HOME/.local/bin/claude2kiro.exe" ]]; }
 st_personal() { [[ -f "$HOME/.claude/.credentials.json" || -f "$HOME/.claude-profiles/personal/.credentials.json" ]]; }
 st_work()     { [[ -f "$HOME/.claude-profiles/work/.credentials.json" ]]; }
 
