@@ -27,12 +27,17 @@ FLASH="${DEEPSEEK_FLASH_MODEL:-deepseek-flash[1m]}"
 PRO="${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro[1m]}"
 
 # --model flash|pro|<id> and --effort low|medium|high|max, same shape as
-# claude2bedrock --openai. Anything else is passed through to Claude Code.
+# claude2bedrock --openai. Anything else is passed through to Claude Code, and
+# everything after a literal `--` is forwarded untouched.
 PASS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --)
+      PASS+=("$@")
+      break
+      ;;
     --model)
-      [[ $# -ge 2 ]] || { echo "claude2deepseek: --model requires flash, pro, or a DeepSeek model id" >&2; exit 2; }
+      [[ $# -ge 2 && "$2" != --* ]] || { echo "claude2deepseek: --model requires flash, pro, or a DeepSeek model id" >&2; exit 2; }
       case "$2" in
         flash) DEEPSEEK_MODEL="$FLASH" ;;
         pro)   DEEPSEEK_MODEL="$PRO" ;;
@@ -41,7 +46,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --effort)
-      [[ $# -ge 2 ]] || { echo "claude2deepseek: --effort requires low, medium, high, or max" >&2; exit 2; }
+      [[ $# -ge 2 && "$2" != --* ]] || { echo "claude2deepseek: --effort requires low, medium, high, or max" >&2; exit 2; }
       case "$2" in
         low|medium|high|max) DEEPSEEK_EFFORT="$2" ;;
         *) echo "claude2deepseek: invalid --effort '$2' (expected low, medium, high, or max)" >&2; exit 2 ;;
@@ -68,6 +73,9 @@ WINDOW="${DEEPSEEK_CONTEXT_WINDOW:-1048576}"
 # Isolated profile: own settings, history, credentials. Nothing leaks to ~/.claude.
 export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/deepseek"
 node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" deepseek
+
+# A leftover selector from another launcher would route past DeepSeek entirely.
+unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
 
 # Official DeepSeek recipe for Claude Code (api-docs.deepseek.com, agent integrations).
 export ANTHROPIC_BASE_URL="$BASE_URL"
