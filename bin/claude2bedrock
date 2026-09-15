@@ -1,53 +1,83 @@
 #!/usr/bin/env bash
 # claude2bedrock — run Claude Code against AWS Bedrock in an isolated profile.
-# Same pattern as claude2kimi: all env vars and the config dir apply only to
-# this process, so your other claude sessions are unaffected.
+# Native mode uses Claude through Claude Code's Bedrock integration. --openai
+# uses the local Anthropic Messages -> Bedrock Converse proxy for OpenAI models.
 set -euo pipefail
 
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+unset CLAUDE2ALL_TIMEOUT_ACTIVE  # consumed here; a nested launcher must get its own limit
+
+# Seed-only mode skips credentials and backend startup. It still performs the sync.
+if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
+  PROFILE=bedrock
+  [[ "${1:-}" == "--openai" || "${BEDROCK_OPENAI:-0}" =~ ^(1|true|yes)$ ]] && PROFILE=bedrock-openai
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/$PROFILE}" "$PROFILE"
+  exit
+fi
+
 CFG="$HOME/.claude2bedrock/config"
+CALLER_AWS_PROFILE="${AWS_PROFILE:-}"
+CALLER_AWS_REGION="${AWS_REGION:-}"
 [[ -f "$CFG" ]] && source "$CFG"
 
-export AWS_PROFILE="${AWS_PROFILE:-your-aws-sso-profile}"
-export AWS_REGION="${AWS_REGION:-us-east-1}"
-OPUS="${BEDROCK_OPUS_MODEL:-us.anthropic.claude-opus-4-8}"
-SONNET="${BEDROCK_SONNET_MODEL:-us.anthropic.claude-sonnet-5}"
-HAIKU="${BEDROCK_HAIKU_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
-FABLE="${BEDROCK_FABLE_MODEL:-$OPUS}"
-SUBAGENT="${BEDROCK_SUBAGENT_MODEL:-$SONNET}"
+OPENAI_MODE="${BEDROCK_OPENAI:-0}"
+if [[ "${1:-}" == "--openai" ]]; then
+  OPENAI_MODE=1
+  shift
+fi
 
-# Isolated profile.
-export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock"
+if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
+  BEDROCK_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --model)
+        [[ $# -ge 2 ]] || { echo "claude2bedrock: --model requires astra, sol, terra, luna, or an inference profile ID" >&2; exit 2; }
+        export BEDROCK_MODEL="$2"
+        shift 2
+        ;;
+      --effort)
+        [[ $# -ge 2 ]] || { echo "claude2bedrock: --effort requires low, medium, high, or max" >&2; exit 2; }
+        case "$2" in low|medium|high|max) export BEDROCK_EFFORT="$2" ;; *) echo "claude2bedrock: invalid --effort '$2' (expected low, medium, high, or max)" >&2; exit 2 ;; esac
+        shift 2
+        ;;
+      *)
+        BEDROCK_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set -- "${BEDROCK_ARGS[@]}"
+fi
+
+if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
+  EXE="${CLAUDE2OPENAI_EXE:-$HOME/.claude2openai/claude2openai.exe}"
+  if [[ ! -x "$EXE" ]]; then
+    echo "claude2bedrock: missing proxy binary: $EXE" >&2
+    echo "Build it: cd /g/code/claude2openai && go build -ldflags '-s -w' -o claude2openai.exe . && cp claude2openai.exe ~/.claude2openai/" >&2
+    exit 1
+  fi
+  export AWS_PROFILE="${BEDROCK_OPENAI_AWS_PROFILE:-${CALLER_AWS_PROFILE:-dfx5-dfx5-internal-apps-dev-administratoraccess}}"
+  export AWS_REGION="${BEDROCK_OPENAI_AWS_REGION:-${CALLER_AWS_REGION:-us-west-2}}"
+  export BEDROCK_MODEL="${BEDROCK_MODEL:-astra}"
+  export BEDROCK_SMALL_MODEL="${BEDROCK_SMALL_MODEL:-luna}"
+  export BEDROCK_OPENAI=1
+  export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock-openai"
+else
+  export AWS_PROFILE="${AWS_PROFILE:-your-aws-sso-profile}"
+  export AWS_REGION="${AWS_REGION:-us-east-1}"
+  OPUS="${BEDROCK_OPUS_MODEL:-us.anthropic.claude-opus-4-8}"
+  SONNET="${BEDROCK_SONNET_MODEL:-us.anthropic.claude-sonnet-5}"
+  HAIKU="${BEDROCK_HAIKU_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
+  FABLE="${BEDROCK_FABLE_MODEL:-$OPUS}"
+  SUBAGENT="${BEDROCK_SUBAGENT_MODEL:-$SONNET}"
+  export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock"
+fi
 mkdir -p "$CLAUDE_CONFIG_DIR"
 
-# Seed the profile (merge-only, never clobbers): onboarding, cwd trust,
-# bypass-permissions default, selective settings mirror from the main profile,
-# global CLAUDE.md, custom skills, and MCP servers.
-node -e 'const fs=require("fs"),path=require("path"),dir=process.argv[1],home=process.env.HOME;
-const jp=path.join(dir,".claude.json");let j={};try{j=JSON.parse(fs.readFileSync(jp,"utf8"))}catch(e){}
-j.hasCompletedOnboarding=true;
-const cwd=process.cwd().replace(/\\/g,"/");
-(j.projects??={})[cwd]={...(j.projects[cwd]||{}),hasTrustDialogAccepted:true};
-let g={};try{g=JSON.parse(fs.readFileSync(home+"/.claude.json","utf8"))}catch(e){}
-if(g.mcpServers)j.mcpServers={...g.mcpServers,...(j.mcpServers||{})};
-fs.writeFileSync(jp,JSON.stringify(j,null,2));
-const sp=path.join(dir,"settings.json");let s={};try{s=JSON.parse(fs.readFileSync(sp,"utf8"))}catch(e){}
-(s.permissions??={}).defaultMode??="bypassPermissions";
-s.skipDangerousModePermissionPrompt??=true;
-let m={};try{m=JSON.parse(fs.readFileSync(home+"/.claude/settings.json","utf8"))}catch(e){}
-for(const k of ["env","statusLine","theme","editorMode","verbose","promptSuggestionEnabled","autoCompactEnabled","skipWorkflowUsageWarning","teammateMode","askUserQuestionTimeout","inputNeededNotifEnabled","agentPushNotifEnabled","remoteControlAtStartup","effortLevel"])
-  if(s[k]===undefined&&m[k]!==undefined)s[k]=m[k];
-fs.writeFileSync(sp,JSON.stringify(s,null,2));
-const md=home+"/.claude/CLAUDE.md";if(fs.existsSync(md)&&!fs.existsSync(path.join(dir,"CLAUDE.md")))fs.copyFileSync(md,path.join(dir,"CLAUDE.md"));
-const sk=home+"/.claude/skills";if(fs.existsSync(sk)&&!fs.existsSync(path.join(dir,"skills")))fs.cpSync(sk,path.join(dir,"skills"),{recursive:true})' "$CLAUDE_CONFIG_DIR"
-
-# Bedrock routing (per-model defaults; ANTHROPIC_MODEL must stay unset).
-export CLAUDE_CODE_USE_BEDROCK=1
-export ANTHROPIC_DEFAULT_OPUS_MODEL="$OPUS"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU"
-export ANTHROPIC_DEFAULT_FABLE_MODEL="$FABLE"
-export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT"
-unset ANTHROPIC_MODEL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN DISABLE_PROMPT_CACHING
+# Refresh instructions and skills; merge onboarding, settings, and MCP servers.
+node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" bedrock
 
 # AWS SSO credentials: re-login interactively when possible, else fail fast.
 if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
@@ -56,9 +86,41 @@ if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
     aws sso login --profile "$AWS_PROFILE" >&2
   else
     echo "claude2bedrock: AWS SSO session expired for profile '$AWS_PROFILE'." >&2
-    echo "Run 'claude2bedrock' once in a terminal to complete 'aws sso login'." >&2
+    if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
+      echo "Run 'aws sso login --sso-session dfx5', then retry." >&2
+    else
+      echo "Run 'claude2bedrock' once in a terminal to complete 'aws sso login'." >&2
+    fi
     exit 1
   fi
 fi
 
+if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
+  # Claude Code talks Anthropic Messages to the local proxy; the proxy signs
+  # ConverseStream requests with the selected AWS profile. The proxy lifecycle
+  # is tied to this process, so no listener remains after Claude exits.
+  unset CLAUDE_CODE_USE_BEDROCK DISABLE_PROMPT_CACHING
+  export ANTHROPIC_MODEL="claude-opus-4-6"
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="claude-opus-4-6"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-6"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-6"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5-20251001"
+  export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-6"
+  export ANTHROPIC_API_KEY=claude2bedrock
+  export ANTHROPIC_AUTH_TOKEN=claude2bedrock
+  if [[ "${1:-}" == "test" ]]; then
+    exec "$EXE" --backend bedrock test
+  fi
+  [[ "${1:-}" == "run" ]] && shift
+  exec "$EXE" --backend bedrock run "$@"
+fi
+
+# Existing Anthropic-native routing remains unchanged when --openai is absent.
+export CLAUDE_CODE_USE_BEDROCK=1
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$OPUS"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$FABLE"
+export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT"
+unset ANTHROPIC_MODEL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN DISABLE_PROMPT_CACHING
 exec claude "$@"

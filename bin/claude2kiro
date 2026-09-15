@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# claude2kiro: sync the isolated profile, then call the separately installed proxy.
+set -euo pipefail
+
+if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/kiro}" kiro
+  exit
+fi
+
+# Use an exact binary path; looking up claude2kiro would recurse into this wrapper.
+# install.sh renames the proxy to claude2kiro-proxy.exe so that `claude2kiro` in
+# PowerShell resolves to the .cmd shim (PATHEXT tries .exe before .cmd).
+EXE="${CLAUDE2KIRO_EXE:-}"
+if [[ -z "$EXE" ]]; then
+  for candidate in "$HOME/.local/bin/claude2kiro-proxy.exe" "$HOME/.local/bin/claude2kiro.exe"; do
+    [[ -x "$candidate" ]] && { EXE="$candidate"; break; }
+  done
+fi
+if [[ -z "$EXE" || ! -x "$EXE" ]]; then
+  echo "claude2kiro: missing proxy binary: ${EXE:-$HOME/.local/bin/claude2kiro-proxy.exe} (install sgeraldes/claude2kiro or set CLAUDE2KIRO_EXE)" >&2
+  exit 1
+fi
+case "${1:-}" in
+  server|test|help|--help|-h|login|logout|config|desktop)
+    exec "$EXE" "$@"
+    ;;
+esac
+
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+unset CLAUDE2ALL_TIMEOUT_ACTIVE  # consumed here; a nested launcher must get its own limit
+
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/kiro"
+node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" kiro
+exec "$EXE" "$@"

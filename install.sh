@@ -7,11 +7,22 @@ cd "$(dirname "$0")"
 
 echo "==> Installing launchers to ~/.local/bin"
 mkdir -p "$HOME/.local/bin"
+# Install the shared helpers before any launcher that calls them.
+cp bin/claude2all-profile.cjs bin/claude2all-timeout.cjs "$HOME/.local/bin/"
 for f in bin/claude2*; do
-  cp "$f" "$HOME/.local/bin/"
+  [[ "$f" == *.cjs ]] && continue
+  # MSYS cp can resolve an extensionless destination to a running .exe (Kiro).
+  # Node uses the exact filename and leaves the proxy binary in place.
+  node -e 'const fs=require("fs"),path=require("path");fs.copyFileSync(process.argv[1],path.join(process.argv[2],path.basename(process.argv[1])))' "$f" "$HOME/.local/bin"
   [[ "$f" == *.cmd ]] || chmod +x "$HOME/.local/bin/$(basename "$f")"
   echo "    $(basename "$f")"
 done
+# The Kiro proxy ships as claude2kiro.exe; next to the claude2kiro.cmd shim PowerShell
+# would run the .exe first and skip profile sync and the clock limit. Rename it.
+if [[ -f "$HOME/.local/bin/claude2kiro.exe" ]]; then
+  node -e 'const fs=require("fs");fs.renameSync(process.argv[1],process.argv[2])' "$HOME/.local/bin/claude2kiro.exe" "$HOME/.local/bin/claude2kiro-proxy.exe"
+  echo "    claude2kiro.exe -> claude2kiro-proxy.exe (the launcher finds it there)"
+fi
 
 echo "==> Installing subagents to ~/.claude/agents"
 mkdir -p "$HOME/.claude/agents"
@@ -42,7 +53,7 @@ Done. Easiest next step — the setup wizard configures backends interactively
 
 Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
-  claude2bedrock  -> set AWS_PROFILE in ~/.claude2bedrock/config (SSO login happens on first run)
+  claude2bedrock  -> native Claude mode, or --openai for Astra/Sol/Terra over Converse
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro
   claude2openai   -> needs the claude2openai proxy binary (see README)
   claude2personal -> works immediately if ~/.claude has a claude.ai login
