@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# claude2deepseek: run Claude Code against DeepSeek (API plan) in an isolated profile.
+# DeepSeek serves the Anthropic Messages API natively at api.deepseek.com/anthropic,
+# so this mirrors claude2kimi: no proxy, only env vars. Everything here applies to
+# this process alone; regular claude sessions and other launchers are unaffected.
+set -euo pipefail
+
+if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/deepseek}" deepseek
+  exit
+fi
+
+CFG="$HOME/.claude2deepseek/config"
+if [[ ! -f "$CFG" ]]; then
+  echo "claude2deepseek: missing config file: $CFG (run install.sh, then claude2all setup)" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+source "$CFG"
+
+if [[ -z "${DEEPSEEK_API_KEY:-}" || "$DEEPSEEK_API_KEY" == "paste-your-deepseek-api-key-here" ]]; then
+  echo "claude2deepseek: set DEEPSEEK_API_KEY in $CFG first (https://platform.deepseek.com/api_keys)." >&2
+  exit 1
+fi
+
+FLASH="${DEEPSEEK_FLASH_MODEL:-deepseek-flash[1m]}"
+PRO="${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro[1m]}"
+
+# --model flash|pro|<id> and --effort low|medium|high|max, same shape as
+# claude2bedrock --openai. Anything else is passed through to Claude Code, and
+# everything after a literal `--` is forwarded untouched.
+PASS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --)
+      PASS+=("$@")
+      break
+      ;;
+    --model)
+      [[ $# -ge 2 && "$2" != --* ]] || { echo "claude2deepseek: --model requires flash, pro, or a DeepSeek model id" >&2; exit 2; }
+      case "$2" in
+        flash) DEEPSEEK_MODEL="$FLASH" ;;
+        pro)   DEEPSEEK_MODEL="$PRO" ;;
+        *)     DEEPSEEK_MODEL="$2" ;;
+      esac
+      shift 2
+      ;;
+    --effort)
+      [[ $# -ge 2 && "$2" != --* ]] || { echo "claude2deepseek: --effort requires low, medium, high, or max" >&2; exit 2; }
+      case "$2" in
+        low|medium|high|max) DEEPSEEK_EFFORT="$2" ;;
+        *) echo "claude2deepseek: invalid --effort '$2' (expected low, medium, high, or max)" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
+    *)
+      PASS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${PASS[@]}"
+
+BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com/anthropic}"
+MODEL="${DEEPSEEK_MODEL:-$FLASH}"
+SONNET="${DEEPSEEK_SONNET_MODEL:-$MODEL}"
+HAIKU="${DEEPSEEK_HAIKU_MODEL:-deepseek-flash}"
+SUBAGENT="${DEEPSEEK_SUBAGENT_MODEL:-$HAIKU}"
+EFFORT="${DEEPSEEK_EFFORT:-max}"
+COMPACT="${DEEPSEEK_AUTO_COMPACT_WINDOW:-786432}"
+WINDOW="${DEEPSEEK_CONTEXT_WINDOW:-1048576}"
+
+# Isolated profile: own settings, history, credentials. Nothing leaks to ~/.claude.
+export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/deepseek"
+node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" deepseek
+
+# A leftover selector from another launcher would route past DeepSeek entirely, and a
+# clock-limit guard inherited from a parent launcher session must not reach Claude Code.
+unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE2ALL_TIMEOUT_ACTIVE
+
+# Official DeepSeek recipe for Claude Code (api-docs.deepseek.com, agent integrations).
+export ANTHROPIC_BASE_URL="$BASE_URL"
+export ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY"
+unset ANTHROPIC_API_KEY  # conflicts with ANTHROPIC_AUTH_TOKEN if left over from other setups
+export ANTHROPIC_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU"
+export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT"
+export CLAUDE_CODE_EFFORT_LEVEL="$EFFORT"
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$COMPACT"
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$WINDOW"
+
+exec claude "$@"

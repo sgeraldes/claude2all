@@ -7,8 +7,7 @@ cd "$(dirname "$0")"
 
 echo "==> Installing launchers to ~/.local/bin"
 mkdir -p "$HOME/.local/bin"
-# Install the shared helpers before any launcher that calls them.
-cp bin/claude2all-profile.cjs bin/claude2all-timeout.cjs "$HOME/.local/bin/"
+cp bin/claude2all-profile.cjs bin/claude2all-timeout.cjs bin/claude2all-config.cjs "$HOME/.local/bin/"
 for f in bin/claude2*; do
   [[ "$f" == *.cjs ]] && continue
   # MSYS cp can resolve an extensionless destination to a running .exe (Kiro).
@@ -53,6 +52,7 @@ Done. Easiest next step — the setup wizard configures backends interactively
 
 Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
+  claude2deepseek -> paste your DeepSeek API key into ~/.claude2deepseek/config
   claude2bedrock  -> native Claude mode, or --openai for Astra/Sol/Terra over Converse
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro
   claude2openai   -> needs the claude2openai proxy binary (see README)

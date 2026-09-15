@@ -1,0 +1,29 @@
+# claude2deepseek configuration: DeepSeek API plan (https://api-docs.deepseek.com)
+# Create a key at https://platform.deepseek.com/api_keys, then paste it below.
+DEEPSEEK_API_KEY=paste-your-deepseek-api-key-here
+
+# Anthropic-compatible endpoint (from the official docs; do not change).
+DEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic
+
+# Models (ids from https://api-docs.deepseek.com/quick_start/pricing, checked 14-sep-2026).
+# Both have a 1M context and 384K max output; Pro costs about four times Flash.
+#   deepseek-flash[1m]  V4.1 Flash. The [1m] suffix is the official Claude Code recipe;
+#                       it tells Claude Code to budget the full 1M window for that slot.
+#   deepseek-v4-pro[1m] V4 Pro, kept in service after 14-sep-2026 at unchanged billing.
+#                       The API accepts the [1m] suffix on both models (verified 14-sep-2026).
+# `--model flash` and `--model pro` on the command line pick these two aliases.
+DEEPSEEK_FLASH_MODEL=deepseek-flash[1m]
+DEEPSEEK_PRO_MODEL=deepseek-v4-pro[1m]
+DEEPSEEK_MODEL=deepseek-flash[1m]
+
+# Tier models. Sonnet follows the main model (and `--model`) unless pinned here;
+# haiku-class requests and subagents use plain deepseek-flash, as in the official recipe.
+#DEEPSEEK_SONNET_MODEL=deepseek-flash[1m]
+DEEPSEEK_HAIKU_MODEL=deepseek-flash
+DEEPSEEK_SUBAGENT_MODEL=deepseek-flash
+
+# Effort: low | medium | high | max (max is the official recipe). `--effort` overrides.
+# Auto-compact at 768K tokens, hard window 1M, both from the official recipe.
+DEEPSEEK_EFFORT=max
+DEEPSEEK_AUTO_COMPACT_WINDOW=786432
+DEEPSEEK_CONTEXT_WINDOW=1048576
