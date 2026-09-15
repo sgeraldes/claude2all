@@ -91,7 +91,9 @@ Claude stays the orchestrator; the named backend does the delegated work headles
   slots, plain `deepseek-flash` for haiku and subagents, effort `max`, auto-compact at
   768K tokens. `--model flash|pro|<id>` switches the main model (`pro` is
   `deepseek-v4-pro[1m]`, about four times the price of Flash); `--effort low|medium|high|max`
-  overrides the effort. Every value can also be pinned in the config file.
+  overrides the effort; everything after a literal `--` goes to Claude Code untouched. Every
+  value can also be pinned in the config file. `tests/claude2deepseek.cjs` runs the launcher
+  against a fake `claude` and checks every exported variable and exit code.
 - **`claude2bedrock`** has two modes. Without a flag it keeps Claude Code's native
   Bedrock/InvokeModel path for Anthropic models. `claude2bedrock --openai` uses the
   local proxy plus ConverseStream for OpenAI models. OpenAI mode defaults to profile
@@ -186,6 +188,7 @@ CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2kimi
 CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2bedrock --openai
 node tests/profile-sync.cjs
 node tests/profile-sync.cjs "$HOME/.local/bin"
+node tests/claude2deepseek.cjs
 ```
 
 El modo seed realiza escrituras reales en el perfil indicado. Fuera de ese modo,
