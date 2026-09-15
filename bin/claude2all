@@ -29,6 +29,12 @@ interactive() { [[ -t 0 && -t 1 ]]; }
 
 # ---------- per-backend status probes (echo nothing; return 0/1) ---------------
 st_kimi()     { [[ -f "$HOME/.claude2kimi/config" ]] && ! grep -q 'paste-your-kimi-code-api-key-here' "$HOME/.claude2kimi/config"; }
+st_deepseek() { # the effective value must be non-empty and not the placeholder (quotes stripped)
+  local f="$HOME/.claude2deepseek/config" v
+  [[ -f "$f" ]] || return 1
+  v=$(sed -n 's/^DEEPSEEK_API_KEY=//p' "$f" | tail -n1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/')
+  [[ -n "$v" && "$v" != paste-your-deepseek-api-key-here ]]
+}
 st_bedrock()  { [[ -f "$HOME/.claude2bedrock/config" ]] && ! grep -q 'your-aws-sso-profile' "$HOME/.claude2bedrock/config"; }
 st_openai()   { [[ -x "$HOME/.claude2openai/claude2openai.exe" && -f "$HOME/.codex/auth.json" ]]; }
 st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro-proxy.exe}" || -x "$HOME/.local/bin/claude2kiro.exe" ]]; }
@@ -43,6 +49,7 @@ probe() { # probe <fn> <label> [hint]
 cmd_status() {
   hr; say "claude2all — backend status"; hr
   probe st_kimi     "claude2kimi      (Kimi K3)"            "paste key into ~/.claude2kimi/config or run: claude2all setup"
+  probe st_deepseek "claude2deepseek  (DeepSeek)"           "paste key into ~/.claude2deepseek/config or run: claude2all setup"
   probe st_bedrock  "claude2bedrock   (AWS Bedrock)"        "set AWS_PROFILE in ~/.claude2bedrock/config"
   probe st_openai   "claude2openai    (OpenAI gpt-5.6)"     "needs proxy binary + codex login"
   probe st_kiro     "claude2kiro      (AWS Kiro)"           "install claude2kiro"
@@ -75,6 +82,33 @@ setup_kimi() {
   ok "key saved to ~/.claude2kimi/config"
   if confirm "Test it now (claude2kimi -p \"say hi\")?"; then
     claude2kimi -p "Reply with exactly: KIMI SETUP OK" 2>&1 | tail -1 || warn "test failed — check the key"
+  fi
+}
+
+setup_deepseek() {
+  say ""; hr; say "DEEPSEEK (API plan: deepseek-flash, deepseek-v4-pro)"
+  if st_deepseek; then ok "already configured"; return; fi
+  say "  You need a DeepSeek API key (https://platform.deepseek.com/api_keys)."
+  if confirm "Open the DeepSeek API keys page in your browser?"; then
+    open_url "https://platform.deepseek.com/api_keys"
+  fi
+  local key
+  read -rsp "    Paste DEEPSEEK_API_KEY (input hidden, empty = skip): " key </dev/tty || key=""
+  echo
+  [[ -z "$key" ]] && { warn "skipped: edit ~/.claude2deepseek/config later"; return; }
+  key="${key%$'\r'}"
+  mkdir -p "$HOME/.claude2deepseek"
+  if [[ ! -f "$HOME/.claude2deepseek/config" ]]; then
+    cp "$STATE_DIR/examples/claude2deepseek.config.example" "$HOME/.claude2deepseek/config" 2>/dev/null \
+      || printf 'DEEPSEEK_API_KEY=paste-your-deepseek-api-key-here\nDEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic\nDEEPSEEK_MODEL=deepseek-flash[1m]\nDEEPSEEK_HAIKU_MODEL=deepseek-flash\nDEEPSEEK_SUBAGENT_MODEL=deepseek-flash\nDEEPSEEK_EFFORT=max\n' > "$HOME/.claude2deepseek/config"
+  fi
+  # The config is read with `source`, so the key is stored as a quoted shell literal;
+  # the helper also collapses duplicate assignments and appends a missing one.
+  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-config.cjs" "$HOME/.claude2deepseek/config" DEEPSEEK_API_KEY "$key" || { warn "key not saved: edit ~/.claude2deepseek/config by hand"; return; }
+  st_deepseek || { warn "key not saved: edit ~/.claude2deepseek/config by hand"; return; }
+  ok "key saved to ~/.claude2deepseek/config"
+  if confirm "Test it now (claude2deepseek -p \"say hi\")?"; then
+    claude2deepseek -p "Reply with exactly: DEEPSEEK SETUP OK" 2>&1 | tail -1 || warn "test failed: check the key"
   fi
 }
 
@@ -197,11 +231,12 @@ cmd_setup() {
     4) AWS Kiro         (via claude2kiro proxy)
     5) claude.ai #1     (personal subscription)
     6) claude.ai #2     (work/team subscription)
+    7) DeepSeek         (API plan, API key)
 EOF
   local picks
   read -rp "  Enter numbers separated by spaces (e.g. 1 3 5), or 'all': " picks </dev/tty || picks=""
   [[ -z "$picks" ]] && { say "Nothing selected — bye."; exit 0; }
-  [[ "${picks,,}" == *all* ]] && picks="1 2 3 4 5 6"
+  [[ "${picks,,}" == *all* ]] && picks="1 2 3 4 5 6 7"
 
   for p in $picks; do
     case "$p" in
@@ -211,6 +246,7 @@ EOF
       4) setup_kiro ;;
       5) setup_personal ;;
       6) setup_work ;;
+      7) setup_deepseek ;;
       *) warn "unknown choice: $p" ;;
     esac
   done

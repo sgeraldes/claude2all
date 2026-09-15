@@ -42,7 +42,7 @@ if (!fs.existsSync(link)) fs.symlinkSync(path.join(root, 'outside'), link, 'junc
 put('home/.claude/skills/linked/SKILL.md', 'Do not overwrite the target\n');
 
 const launchers = [
-  ['claude2kiro', []], ['claude2openai', []], ['claude2kimi', []],
+  ['claude2kiro', []], ['claude2openai', []], ['claude2kimi', []], ['claude2deepseek', []],
   ['claude2bedrock', []], ['claude2bedrock', ['--openai']],
 ];
 let version = 0;
