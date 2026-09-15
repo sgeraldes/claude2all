@@ -1,6 +1,6 @@
 ---
 name: deepseek
-description: Delegate a task to a separate Claude Code process running on DeepSeek (API plan, deepseek-flash by default, deepseek-v4-pro with --model pro). Use for a second opinion, parallel implementation of a subtask, or any work you want done by DeepSeek instead of the current model.
+description: Delegate a task to a separate Claude Code process running on DeepSeek (API plan, deepseek-flash[1m] by default, deepseek-v4-pro[1m] with --model pro). Use for a second opinion, parallel implementation of a subtask, or any work you want done by DeepSeek instead of the current model.
 tools: Bash, Read
 ---
 

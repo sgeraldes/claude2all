@@ -154,5 +154,22 @@ if (process.platform === 'win32') {
   console.log('PASS claude2deepseek.cmd delegates to the Bash launcher');
 }
 
+// The wizard stores the key through bin/claude2all-config.cjs; the file is later `source`d.
+const { upsert } = require('../bin/claude2all-config.cjs');
+const cfg = "# c\nDEEPSEEK_API_KEY=paste-your-deepseek-api-key-here\nDEEPSEEK_MODEL=deepseek-flash[1m]\n";
+assert.equal(upsert(cfg, 'DEEPSEEK_API_KEY', 'sk-plain'), "# c\nDEEPSEEK_API_KEY='sk-plain'\nDEEPSEEK_MODEL=deepseek-flash[1m]\n");
+assert.equal(upsert("DEEPSEEK_MODEL=x\n", 'DEEPSEEK_API_KEY', 'sk-new'), "DEEPSEEK_MODEL=x\nDEEPSEEK_API_KEY='sk-new'\n", 'appends when missing');
+assert.equal(upsert("DEEPSEEK_API_KEY=a\nX=1\nDEEPSEEK_API_KEY=b\n", 'DEEPSEEK_API_KEY', 'c'), "DEEPSEEK_API_KEY='c'\nX=1\n", 'collapses duplicates');
+assert.equal(upsert('', 'DEEPSEEK_API_KEY', 'sk'), "DEEPSEEK_API_KEY='sk'\n", 'empty file');
+assert.throws(() => upsert(cfg, 'DEEPSEEK_API_KEY', 'sk\nX=1'), /control character/);
+assert.throws(() => upsert(cfg, 'bad-name', 'x'), /invalid variable name/);
+const hostile = `ab&printf x|c d$(echo e)\`f\` 'g' "h" \\i`;
+const written = path.join(root, 'hostile.cfg');
+fs.writeFileSync(written, upsert(cfg, 'DEEPSEEK_API_KEY', hostile));
+const sourced = spawnSync(bash, ['-c', `source "$1" && printf '%s' "$DEEPSEEK_API_KEY"`, 'bash', posix(written)], { encoding: 'utf8' });
+assert.equal(sourced.status, 0, sourced.stderr);
+assert.equal(sourced.stdout, hostile, 'a hostile key round-trips through source unchanged');
+console.log('PASS config helper stores the key as a shell literal; hostile keys round-trip through source');
+
 fs.rmSync(root, { recursive: true, force: true });
 console.log('claude2deepseek contract tests passed');
