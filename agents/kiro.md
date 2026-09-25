@@ -26,6 +26,7 @@ Guidelines:
   selects a model the Kiro account actually serves (the claude default is not
   available on Kiro and the request would be rejected).
 - The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
+- Headless runs start with no MCP servers (`--strict-mcp-config`). If the task needs MCP tools, pass `--mcp-config <file>` or set `CLAUDE2ALL_MCP=all`.
 - For multi-step tasks add `--max-turns 30` to bound the run.
 - If it fails with "No token found", tell the user to run `claude2kiro login` —
   do not retry.

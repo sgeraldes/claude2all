@@ -23,6 +23,12 @@ if [[ -z "${DEEPSEEK_API_KEY:-}" || "$DEEPSEEK_API_KEY" == "paste-your-deepseek-
   exit 1
 fi
 
+# Headless runs get the same clock limit as the other launchers (and no MCP servers unless
+# asked for); the helper re-enters this script with CLAUDE2ALL_TIMEOUT_ACTIVE=1.
+if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
+  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
+fi
+
 FLASH="${DEEPSEEK_FLASH_MODEL:-deepseek-flash[1m]}"
 PRO="${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro[1m]}"
 

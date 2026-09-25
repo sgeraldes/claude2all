@@ -36,3 +36,5 @@ Guidelines:
 - If the command fails with "set DEEPSEEK_API_KEY", tell the user to add their key to
   ~/.claude2deepseek/config and do not retry.
 - Return DeepSeek's output verbatim. If you truncate it, say so in one line.
+- The launcher applies a 90-minute clock limit to `-p` runs. Pass `--max-minutes <n>` to set a positive whole-minute limit; it ends with code 124 when the clock expires.
+- Headless runs start with no MCP servers (`--strict-mcp-config`). If the task needs MCP tools, pass `--mcp-config <file>` or set `CLAUDE2ALL_MCP=all`.

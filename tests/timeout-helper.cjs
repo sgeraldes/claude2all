@@ -72,11 +72,35 @@ async function main() {
   }
   console.log('PASS parser errors exit 2');
 
-  // Arguments reach the child untouched: no marker, `--print` recognised, `--` respected.
+  // Arguments reach the child untouched apart from the MCP default below: no marker,
+  // `--print` recognised, `--` respected.
+  const lines = (result) => result.stdout.trim().split(/\r?\n/);
   const passthrough = await run([argsScript, '--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
   assert.equal(passthrough.code, 0, passthrough.stderr);
-  assert.deepEqual(passthrough.stdout.trim().split(/\r?\n/), ['--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
+  assert.deepEqual(lines(passthrough), ['--strict-mcp-config', '--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
   console.log('PASS arguments pass through untouched, including everything after --');
+
+  // Flags right after -p stay flags. The 14-sep marker build appended its run id to whatever
+  // followed -p, so `-p --max-turns 2 x` reached Claude Code as an unknown option.
+  const flagsAfterP = await run([argsScript, '-p', '--max-turns', '2', 'x']);
+  assert.equal(flagsAfterP.code, 0, flagsAfterP.stderr);
+  assert.deepEqual(lines(flagsAfterP), ['--strict-mcp-config', '-p', '--max-turns', '2', 'x']);
+  console.log('PASS flags after -p reach Claude Code as flags');
+
+  // Headless runs load no MCP servers unless the caller asks for them.
+  for (const [args, env, expected, why] of [
+    [[argsScript, '--mcp-config', 'cfg.json', '-p', 'x'], {}, ['--mcp-config', 'cfg.json', '-p', 'x'], 'an explicit --mcp-config'],
+    [[argsScript, '--mcp-config=cfg.json', '-p', 'x'], {}, ['--mcp-config=cfg.json', '-p', 'x'], 'an explicit --mcp-config=...'],
+    [[argsScript, '--strict-mcp-config', '-p', 'x'], {}, ['--strict-mcp-config', '-p', 'x'], 'an explicit --strict-mcp-config (not doubled)'],
+    [[argsScript, '-p', 'x'], { CLAUDE2ALL_MCP: 'all' }, ['-p', 'x'], 'CLAUDE2ALL_MCP=all'],
+    [[argsScript, 'hola'], {}, ['hola'], 'an interactive run'],
+    [[argsScript, 'run', '-p', 'x'], {}, ['run', '--strict-mcp-config', '-p', 'x'], 'a launcher subcommand before -p'],
+  ]) {
+    const result = await run(args, env);
+    assert.equal(result.code, 0, `${why}: ${result.stderr}`);
+    assert.deepEqual(lines(result), expected, why);
+  }
+  console.log('PASS headless runs get --strict-mcp-config unless MCP is asked for; interactive runs are untouched');
 
   if (process.platform === 'win32') {
     // Batch files run through cmd.exe, shell scripts through Git Bash, executables directly.

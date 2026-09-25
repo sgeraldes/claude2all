@@ -79,12 +79,13 @@ function parseArgs(argv, env = process.env) {
 
   const own = filteredArgs.indexOf('--') === -1 ? filteredArgs : filteredArgs.slice(0, filteredArgs.indexOf('--'));
   const headless = own.includes('-p') || own.includes('--print');
+  const commandOut = headless ? withoutMcpByDefault(filteredArgs, own, env) : filteredArgs;
   if (requestedMinutes === undefined || requestedMinutes === '') {
     requestedMinutes = headless ? '90' : undefined;
   }
 
   if (requestedMinutes === undefined) {
-    return { commandArgs: filteredArgs, timeoutMs: undefined, minutes: undefined };
+    return { commandArgs: commandOut, timeoutMs: undefined, minutes: undefined };
   }
 
   if (!/^\d+$/.test(requestedMinutes) || Number(requestedMinutes) < 1 || Number(requestedMinutes) > MAX_MINUTES) {
@@ -92,10 +93,22 @@ function parseArgs(argv, env = process.env) {
   }
 
   return {
-    commandArgs: filteredArgs,
+    commandArgs: commandOut,
     timeoutMs: Number(requestedMinutes) * 60_000,
     minutes: Number(requestedMinutes),
   };
+}
+
+// A headless run is delegated work, so it loads no MCP servers unless the caller asks for
+// them: `--mcp-config`, `--strict-mcp-config`, or CLAUDE2ALL_MCP=all. Each server a run loads
+// is a process tree of its own; measured on 25-sep-2026, parallel runs had pushed the machine
+// to 254 MCP processes and 9 GB. The flag goes right before -p/--print, so a launcher
+// subcommand in front (`claude2openai run ...`) stays first.
+function withoutMcpByDefault(args, own, env) {
+  const asks = (flag) => own.some((a) => a === flag || a.startsWith(`${flag}=`));
+  if (env.CLAUDE2ALL_MCP === 'all' || asks('--mcp-config') || asks('--strict-mcp-config')) return args;
+  const at = args.findIndex((a) => a === '-p' || a === '--print');
+  return [...args.slice(0, at), '--strict-mcp-config', ...args.slice(at)];
 }
 
 // Run a helper command without blocking the event loop. Resolves with

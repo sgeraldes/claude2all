@@ -172,7 +172,6 @@ function syncProfile(dir, backend, home = process.env.HOME || os.homedir()) {
   const keys = ['env', 'statusLine', 'theme', 'editorMode', 'verbose', 'promptSuggestionEnabled',
     'autoCompactEnabled', 'skipWorkflowUsageWarning', 'teammateMode', 'askUserQuestionTimeout',
     'inputNeededNotifEnabled', 'agentPushNotifEnabled', 'remoteControlAtStartup'];
-  if (backend.startsWith('bedrock')) keys.push('effortLevel');
   for (const key of keys) if (s[key] === undefined && main[key] !== undefined) s[key] = main[key];
   writeChanged(sp, JSON.stringify(s, null, 2) + '\n');
   writeChanged(statePath, JSON.stringify({ source, md: mdState, skills: next }, null, 2) + '\n');

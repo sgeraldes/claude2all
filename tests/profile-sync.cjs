@@ -43,8 +43,16 @@ put('home/.claude/skills/linked/SKILL.md', 'Do not overwrite the target\n');
 
 const launchers = [
   ['claude2kiro', []], ['claude2openai', []], ['claude2kimi', []], ['claude2deepseek', []],
-  ['claude2bedrock', []], ['claude2bedrock', ['--openai']],
 ];
+
+// claude2bedrock was retired on 2026-09-21: it explains why and exits, seeding and starting nothing.
+for (const args of [[], ['--openai'], ['-p', 'x']]) {
+  const retired = spawnSync(bash, [path.join(bin, 'claude2bedrock'), ...args],
+    { env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: profile, CLAUDE2ALL_SEED_ONLY: '1' }, encoding: 'utf8' });
+  assert.equal(retired.status, 2, `claude2bedrock ${args.join(' ')} must refuse`);
+  assert.match(retired.stderr, /retirado desde el 2026-09-21/);
+}
+console.log('PASS claude2bedrock is retired: exit 2 with the reason, in seed mode too');
 let version = 0;
 for (const cmd of process.platform === 'win32' ? [false, true] : [false]) {
   for (const [launcher, args] of launchers) {
@@ -73,7 +81,9 @@ assert.ok(fs.lstatSync(link).isSymbolicLink());
 const settings = JSON.parse(read('profile/settings.json'));
 assert.equal(settings.theme, 'dark');
 assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
-assert.equal(settings.effortLevel, 'high');
+// Only the retired Bedrock profiles copied effortLevel; every live launcher sets
+// CLAUDE_CODE_EFFORT_LEVEL itself, so the main profile's value must not leak in.
+assert.equal(settings.effortLevel, undefined);
 const state = JSON.parse(read('profile/.claude.json'));
 assert.equal(state.hasCompletedOnboarding, true);
 assert.equal(state.penguinModeOrgEnabled, true);

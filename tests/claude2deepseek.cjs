@@ -70,7 +70,9 @@ const pinned = home('pinned', 'DEEPSEEK_API_KEY=sk-pinned\nDEEPSEEK_MODEL=deepse
 
 let r = run(configured, ['-p', 'hello', '--max-turns', '3']);
 assert.equal(r.status, 0, r.stderr);
-assert.deepEqual(r.args, ['-p', 'hello', '--max-turns', '3']);
+// Headless runs go through the clock-limit helper, which adds --strict-mcp-config.
+assert.deepEqual(r.args, ['--strict-mcp-config', '-p', 'hello', '--max-turns', '3']);
+assert.equal(r.env.CLAUDE2ALL_TIMEOUT_ACTIVE, '<unset>');
 assert.equal(r.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
 assert.equal(r.env.ANTHROPIC_AUTH_TOKEN, 'sk-test-key');
 assert.equal(r.env.ANTHROPIC_API_KEY, '<unset>');
@@ -89,7 +91,7 @@ console.log('PASS defaults follow the official DeepSeek recipe; arguments pass t
 
 r = run(configured, ['--model', 'pro', '--effort', 'high', '-p', 'x']);
 assert.equal(r.status, 0, r.stderr);
-assert.deepEqual(r.args, ['-p', 'x']);
+assert.deepEqual(r.args, ['--strict-mcp-config', '-p', 'x']);
 assert.equal(r.env.ANTHROPIC_MODEL, 'deepseek-v4-pro[1m]');
 assert.equal(r.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'deepseek-v4-pro[1m]');
 assert.equal(r.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'deepseek-v4-pro[1m]');
@@ -100,6 +102,17 @@ assert.equal(r.status, 0, r.stderr);
 assert.equal(r.env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
 assert.deepEqual(r.args, []);
 console.log('PASS --model flash|pro|<id> and --effort are consumed by the launcher');
+
+// The clock limit: --max-minutes is the helper's, never Claude Code's; MCP comes back on request.
+r = run(configured, ['--max-minutes', '5', '-p', 'x']);
+assert.equal(r.status, 0, r.stderr);
+assert.deepEqual(r.args, ['--strict-mcp-config', '-p', 'x']);
+r = run(configured, ['-p', 'x'], { CLAUDE2ALL_MCP: 'all' });
+assert.equal(r.status, 0, r.stderr);
+assert.deepEqual(r.args, ['-p', 'x']);
+r = run(configured, ['--max-minutes', '0', '-p', 'x']);
+assert.equal(r.status, 2, 'an invalid limit stops the run before Claude Code starts');
+console.log('PASS --max-minutes is consumed by the helper; headless runs load no MCP unless CLAUDE2ALL_MCP=all');
 
 r = run(pinned, ['--effort', 'medium']);
 assert.equal(r.status, 0, r.stderr);
@@ -150,7 +163,7 @@ console.log('PASS placeholder, empty and missing keys exit 1 before Claude Code 
 if (process.platform === 'win32') {
   r = run(configured, ['--model', 'pro', '-p', 'via cmd'], {}, true);
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(r.args, ['-p', 'via cmd']);
+  assert.deepEqual(r.args, ['--strict-mcp-config', '-p', 'via cmd']);
   assert.equal(r.env.ANTHROPIC_MODEL, 'deepseek-v4-pro[1m]');
   console.log('PASS claude2deepseek.cmd delegates to the Bash launcher');
 }
