@@ -26,6 +26,12 @@ fi
 echo "==> Installing subagents to ~/.claude/agents"
 mkdir -p "$HOME/.claude/agents"
 cp agents/*.md "$HOME/.claude/agents/"
+# The bedrock subagent was retired on 2026-09-21 with its launcher. A copy left by an older
+# install would still offer it to every session, so park it under a name Claude Code skips.
+if [[ -f "$HOME/.claude/agents/bedrock.md" ]]; then
+  mv "$HOME/.claude/agents/bedrock.md" "$HOME/.claude/agents/bedrock.md.retirado-$(date +%Y%m%d)"
+  echo "    parked the retired bedrock subagent"
+fi
 ls agents/*.md | xargs -n1 basename | sed 's/^/    /'
 
 echo "==> Installing example configs (skipped where one exists)"
@@ -53,7 +59,7 @@ Done. Easiest next step — the setup wizard configures backends interactively
 Or per backend by hand:
   claude2kimi     -> paste your Kimi Code API key into ~/.claude2kimi/config
   claude2deepseek -> paste your DeepSeek API key into ~/.claude2deepseek/config
-  claude2bedrock  -> native Claude mode, or --openai for Astra/Sol/Terra over Converse
+  claude2bedrock  -> retired on 2026-09-21 (it spent an AWS account); it only prints why
   claude2kiro     -> separate project: https://github.com/sgeraldes/claude2kiro
   claude2openai   -> needs the claude2openai proxy binary (see README)
   claude2personal -> works immediately if ~/.claude has a claude.ai login

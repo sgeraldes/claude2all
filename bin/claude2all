@@ -35,7 +35,6 @@ st_deepseek() { # the effective value must be non-empty and not the placeholder 
   v=$(sed -n 's/^DEEPSEEK_API_KEY=//p' "$f" | tail -n1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/')
   [[ -n "$v" && "$v" != paste-your-deepseek-api-key-here ]]
 }
-st_bedrock()  { [[ -f "$HOME/.claude2bedrock/config" ]] && ! grep -q 'your-aws-sso-profile' "$HOME/.claude2bedrock/config"; }
 st_openai()   { [[ -x "$HOME/.claude2openai/claude2openai.exe" && -f "$HOME/.codex/auth.json" ]]; }
 st_kiro()     { [[ -x "${CLAUDE2KIRO_EXE:-$HOME/.local/bin/claude2kiro-proxy.exe}" || -x "$HOME/.local/bin/claude2kiro.exe" ]]; }
 st_personal() { [[ -f "$HOME/.claude/.credentials.json" || -f "$HOME/.claude-profiles/personal/.credentials.json" ]]; }
@@ -50,7 +49,7 @@ cmd_status() {
   hr; say "claude2all — backend status"; hr
   probe st_kimi     "claude2kimi      (Kimi K3)"            "paste key into ~/.claude2kimi/config or run: claude2all setup"
   probe st_deepseek "claude2deepseek  (DeepSeek)"           "paste key into ~/.claude2deepseek/config or run: claude2all setup"
-  probe st_bedrock  "claude2bedrock   (AWS Bedrock)"        "set AWS_PROFILE in ~/.claude2bedrock/config"
+  warn  "claude2bedrock   (AWS Bedrock) — retired on 2026-09-21; delegate on a subscription"
   probe st_openai   "claude2openai    (OpenAI gpt-5.6)"     "needs proxy binary + codex login"
   probe st_kiro     "claude2kiro      (AWS Kiro)"           "install claude2kiro"
   probe st_personal "claude2personal  (claude.ai #1)"       "log into claude once"
@@ -113,31 +112,10 @@ setup_deepseek() {
 }
 
 setup_bedrock() {
-  say ""; hr; say "AWS BEDROCK (your AWS account via SSO)"
-  if st_bedrock; then ok "already configured"; return; fi
-  have aws || { warn "aws CLI not found — install it first (winget install Amazon.AWSCLI)"; return; }
-  say "  Available AWS profiles:"
-  aws configure list-profiles 2>/dev/null | sed 's/^/    /' | head -15 || true
-  local prof region
-  read -rp "    AWS SSO profile to use: " prof </dev/tty || prof=""
-  [[ -z "$prof" ]] && { warn "skipped"; return; }
-  read -rp "    Region [us-east-1]: " region </dev/tty || region=""
-  region="${region:-us-east-1}"
-  mkdir -p "$HOME/.claude2bedrock"
-  [[ -f "$HOME/.claude2bedrock/config" ]] || cp "$STATE_DIR/examples/claude2bedrock.config.example" "$HOME/.claude2bedrock/config" 2>/dev/null || true
-  sed -i "s|^AWS_PROFILE=.*|AWS_PROFILE=$prof|; s|^AWS_REGION=.*|AWS_REGION=$region|" "$HOME/.claude2bedrock/config"
-  ok "profile saved"
-  if ! aws sts get-caller-identity --profile "$prof" >/dev/null 2>&1; then
-    if confirm "SSO session expired — run 'aws sso login' now (browser)?"; then
-      aws sso login --profile "$prof" </dev/tty >/dev/tty 2>&1 || warn "sso login failed"
-    fi
-  fi
-  if aws sts get-caller-identity --profile "$prof" >/dev/null 2>&1; then
-    ok "AWS credentials work"
-    if confirm "Test it now (claude2bedrock -p \"say hi\")?"; then
-      claude2bedrock -p "Reply with exactly: BEDROCK SETUP OK" 2>&1 | tail -1 || warn "test failed — check model ids in the config comments"
-    fi
-  fi
+  say ""; hr; say "AWS BEDROCK — retired on 2026-09-21"
+  warn "claude2bedrock spent the AWS account internal-apps-dev (2,768 USD in September against 69 in"
+  warn "August). An SCP now denies every billable Bedrock call there. Delegate work on a subscription:"
+  warn "claude2kiro, claude2openai or claude2kimi."
 }
 
 setup_openai() {
@@ -226,7 +204,7 @@ cmd_setup() {
   hr; say "claude2all setup — which backends do you want to configure?"; hr
   cat <<'EOF'
     1) Kimi K3          (Kimi Code plan, API key)
-    2) AWS Bedrock      (your AWS account, SSO)
+    2) AWS Bedrock      (retired 2026-09-21)
     3) OpenAI gpt-5.6   (ChatGPT subscription via Codex CLI)
     4) AWS Kiro         (via claude2kiro proxy)
     5) claude.ai #1     (personal subscription)

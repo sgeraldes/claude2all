@@ -1,126 +1,27 @@
 #!/usr/bin/env bash
-# claude2bedrock — run Claude Code against AWS Bedrock in an isolated profile.
-# Native mode uses Claude through Claude Code's Bedrock integration. --openai
-# uses the local Anthropic Messages -> Bedrock Converse proxy for OpenAI models.
-set -euo pipefail
+# RETIRADO el 2026-09-21 por decisión de Sebastián.
+#
+# Este puente gastaba la cuenta AWS internal-apps-dev (613208686219). En septiembre esa
+# cuenta llegó a 2.768,26 USD contra 68,76 de todo agosto: 1.502,13 de GPT-6 Astra,
+# 663,71 de Sol y 449,74 de Terra.
+#
+# El bloqueo de verdad es la SCP `dfx5-DenyBedrockSpend-InternalAppsDev` (p-k24girfv),
+# adjunta solo a esa cuenta, que niega toda acción de Bedrock que factura incluso a un
+# administrador. Esto de acá es la puerta de calle: evita el intento y el gasto de tiempo.
+#
+# El original quedó en claude2bedrock.retirado-20260921.
+#
+# Para delegar trabajo, usar una suscripción, no una cuenta AWS:
+#   claude2kiro    (suscripción Kiro)
+#   claude2openai  (suscripción ChatGPT)
+#   claude2kimi    (suscripción Moonshot)
 
-if [[ "${CLAUDE2ALL_TIMEOUT_ACTIVE:-0}" != "1" ]]; then
-  exec node "$(dirname "${BASH_SOURCE[0]}")/claude2all-timeout.cjs" -- "$0" "$@"
-fi
-unset CLAUDE2ALL_TIMEOUT_ACTIVE  # consumed here; a nested launcher must get its own limit
+cat >&2 <<'MSG'
+claude2bedrock está retirado desde el 2026-09-21.
 
-# Seed-only mode skips credentials and backend startup. It still performs the sync.
-if [[ "${CLAUDE2ALL_SEED_ONLY:-0}" == "1" ]]; then
-  PROFILE=bedrock
-  [[ "${1:-}" == "--openai" || "${BEDROCK_OPENAI:-0}" =~ ^(1|true|yes)$ ]] && PROFILE=bedrock-openai
-  node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude-profiles/$PROFILE}" "$PROFILE"
-  exit
-fi
+Gastaba la cuenta AWS internal-apps-dev, y esa cuenta tiene una SCP que ahora niega toda
+llamada a Bedrock que facture. Correr esto no gastaría nada, pero tampoco funcionaría.
 
-CFG="$HOME/.claude2bedrock/config"
-CALLER_AWS_PROFILE="${AWS_PROFILE:-}"
-CALLER_AWS_REGION="${AWS_REGION:-}"
-[[ -f "$CFG" ]] && source "$CFG"
-
-OPENAI_MODE="${BEDROCK_OPENAI:-0}"
-if [[ "${1:-}" == "--openai" ]]; then
-  OPENAI_MODE=1
-  shift
-fi
-
-if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
-  BEDROCK_ARGS=()
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --model)
-        [[ $# -ge 2 ]] || { echo "claude2bedrock: --model requires astra, sol, terra, luna, or an inference profile ID" >&2; exit 2; }
-        export BEDROCK_MODEL="$2"
-        shift 2
-        ;;
-      --effort)
-        [[ $# -ge 2 ]] || { echo "claude2bedrock: --effort requires low, medium, high, or max" >&2; exit 2; }
-        case "$2" in low|medium|high|max) export BEDROCK_EFFORT="$2" ;; *) echo "claude2bedrock: invalid --effort '$2' (expected low, medium, high, or max)" >&2; exit 2 ;; esac
-        shift 2
-        ;;
-      *)
-        BEDROCK_ARGS+=("$1")
-        shift
-        ;;
-    esac
-  done
-  set -- "${BEDROCK_ARGS[@]}"
-fi
-
-if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
-  EXE="${CLAUDE2OPENAI_EXE:-$HOME/.claude2openai/claude2openai.exe}"
-  if [[ ! -x "$EXE" ]]; then
-    echo "claude2bedrock: missing proxy binary: $EXE" >&2
-    echo "Build it: cd /g/code/claude2openai && go build -ldflags '-s -w' -o claude2openai.exe . && cp claude2openai.exe ~/.claude2openai/" >&2
-    exit 1
-  fi
-  export AWS_PROFILE="${BEDROCK_OPENAI_AWS_PROFILE:-${CALLER_AWS_PROFILE:-dfx5-dfx5-internal-apps-dev-administratoraccess}}"
-  export AWS_REGION="${BEDROCK_OPENAI_AWS_REGION:-${CALLER_AWS_REGION:-us-west-2}}"
-  export BEDROCK_MODEL="${BEDROCK_MODEL:-astra}"
-  export BEDROCK_SMALL_MODEL="${BEDROCK_SMALL_MODEL:-luna}"
-  export BEDROCK_OPENAI=1
-  export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock-openai"
-else
-  export AWS_PROFILE="${AWS_PROFILE:-your-aws-sso-profile}"
-  export AWS_REGION="${AWS_REGION:-us-east-1}"
-  OPUS="${BEDROCK_OPUS_MODEL:-us.anthropic.claude-opus-4-8}"
-  SONNET="${BEDROCK_SONNET_MODEL:-us.anthropic.claude-sonnet-5}"
-  HAIKU="${BEDROCK_HAIKU_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
-  FABLE="${BEDROCK_FABLE_MODEL:-$OPUS}"
-  SUBAGENT="${BEDROCK_SUBAGENT_MODEL:-$SONNET}"
-  export CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/bedrock"
-fi
-mkdir -p "$CLAUDE_CONFIG_DIR"
-
-# Refresh instructions and skills; merge onboarding, settings, and MCP servers.
-node "$(dirname "${BASH_SOURCE[0]}")/claude2all-profile.cjs" "$CLAUDE_CONFIG_DIR" bedrock
-
-# AWS SSO credentials: re-login interactively when possible, else fail fast.
-if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
-  if [[ -t 0 ]]; then
-    echo "claude2bedrock: SSO session expired — logging in..." >&2
-    aws sso login --profile "$AWS_PROFILE" >&2
-  else
-    echo "claude2bedrock: AWS SSO session expired for profile '$AWS_PROFILE'." >&2
-    if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
-      echo "Run 'aws sso login --sso-session dfx5', then retry." >&2
-    else
-      echo "Run 'claude2bedrock' once in a terminal to complete 'aws sso login'." >&2
-    fi
-    exit 1
-  fi
-fi
-
-if [[ "$OPENAI_MODE" == "1" || "$OPENAI_MODE" == "true" || "$OPENAI_MODE" == "yes" ]]; then
-  # Claude Code talks Anthropic Messages to the local proxy; the proxy signs
-  # ConverseStream requests with the selected AWS profile. The proxy lifecycle
-  # is tied to this process, so no listener remains after Claude exits.
-  unset CLAUDE_CODE_USE_BEDROCK DISABLE_PROMPT_CACHING
-  export ANTHROPIC_MODEL="claude-opus-4-6"
-  export ANTHROPIC_DEFAULT_FABLE_MODEL="claude-opus-4-6"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-6"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-6"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5-20251001"
-  export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-6"
-  export ANTHROPIC_API_KEY=claude2bedrock
-  export ANTHROPIC_AUTH_TOKEN=claude2bedrock
-  if [[ "${1:-}" == "test" ]]; then
-    exec "$EXE" --backend bedrock test
-  fi
-  [[ "${1:-}" == "run" ]] && shift
-  exec "$EXE" --backend bedrock run "$@"
-fi
-
-# Existing Anthropic-native routing remains unchanged when --openai is absent.
-export CLAUDE_CODE_USE_BEDROCK=1
-export ANTHROPIC_DEFAULT_OPUS_MODEL="$OPUS"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="$SONNET"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="$HAIKU"
-export ANTHROPIC_DEFAULT_FABLE_MODEL="$FABLE"
-export CLAUDE_CODE_SUBAGENT_MODEL="$SUBAGENT"
-unset ANTHROPIC_MODEL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN DISABLE_PROMPT_CACHING
-exec claude "$@"
+Delegá contra una suscripción: claude2kiro, claude2openai o claude2kimi.
+MSG
+exit 2

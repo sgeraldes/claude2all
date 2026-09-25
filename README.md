@@ -40,7 +40,7 @@ Then:
 ```bash
 claude2kimi        # Claude Code, powered by Kimi K3
 claude2deepseek    # Claude Code, powered by your DeepSeek API plan
-claude2bedrock     # Claude Code, powered by your AWS Bedrock account
+claude2openai      # Claude Code, powered by your ChatGPT subscription (gpt-5.6)
 claude2work        # Claude Code on your second claude.ai subscription
 ```
 
@@ -52,7 +52,7 @@ accepts works:
 ```bash
 claude2kimi                          # interactive session
 claude2kimi -p "explain src/api/"    # one-shot headless answer
-claude2bedrock --resume              # resume last session (per-profile history)
+claude2openai --resume               # resume last session (per-profile history)
 ```
 
 | Launcher | Backend | Models it loads |
@@ -60,11 +60,14 @@ claude2bedrock --resume              # resume last session (per-profile history)
 | `claude2kimi` | [Kimi Code](https://www.kimi.com/code/docs) plan | `k3[1m]` main · `kimi-for-coding` sonnet · `kimi-for-coding-highspeed` haiku |
 | `claude2deepseek` | [DeepSeek](https://api-docs.deepseek.com) API plan (Anthropic-compatible endpoint) | `deepseek-flash[1m]` main · `deepseek-flash` haiku and subagents · `--model pro` for `deepseek-v4-pro[1m]`; `--effort` |
 | `claude2kiro run` | AWS Kiro via **[claude2kiro](https://github.com/sgeraldes/claude2kiro)** | nothing pinned — `auto`, Kiro picks per request |
-| `claude2bedrock` | AWS Bedrock native (Claude) | opus 4.8 main · sonnet 5 sonnet · haiku 4.5 (configurable) |
-| `claude2bedrock --openai` | AWS Bedrock Converse (OpenAI) | Astra default · Sol · Terra · Luna for haiku-class requests; `--model` / `--effort` |
 | `claude2openai` | OpenAI via ChatGPT OAuth (Codex CLI session) | `gpt-5.6-sol` main · `gpt-5.6-terra` sonnet · `gpt-5.6-luna` haiku |
 | `claude2personal` | claude.ai subscription #1 | unpinned (account default; `/model` to change) |
 | `claude2work` | claude.ai subscription #2 (team) | unpinned |
+
+`claude2bedrock` was retired on 2026-09-21. It spent an AWS account instead of a
+subscription (2,768 USD in September against 69 in August), and an SCP now denies every
+billable Bedrock call on that account. The launcher only prints why; its subagent is gone,
+and `install.sh` parks a copy left by an older install.
 
 ## Way 2: Inside Claude Code (subagents)
 
@@ -73,12 +76,12 @@ regular Claude Code session you just ask in natural language:
 
 ```
 > use the kimi-k3 subagent to review src/auth.ts
-> have the bedrock subagent write the terraform for an S3 bucket
+> have the openai subagent write the terraform for an S3 bucket
 ```
 
 Claude stays the orchestrator; the named backend does the delegated work headlessly
 (`claude2<backend> -p "<task>"`) and returns its output. Available subagents:
-`kimi-k3`, `deepseek`, `kiro`, `bedrock`, `openai`. Check `/agents` in a session to see them.
+`kimi-k3`, `deepseek`, `kiro`, `openai`. Check `/agents` in a session to see them.
 
 ## Setup per backend
 
@@ -94,32 +97,6 @@ Claude stays the orchestrator; the named backend does the delegated work headles
   overrides the effort; everything after a literal `--` goes to Claude Code untouched. Every
   value can also be pinned in the config file. `tests/claude2deepseek.cjs` runs the launcher
   against a fake `claude` and checks every exported variable and exit code.
-- **`claude2bedrock`** has two modes. Without a flag it keeps Claude Code's native
-  Bedrock/InvokeModel path for Anthropic models. `claude2bedrock --openai` uses the
-  local proxy plus ConverseStream for OpenAI models. OpenAI mode defaults to profile
-  `dfx5-dfx5-internal-apps-dev-administratoraccess`, region `us-west-2`, and Astra;
-  override these with `BEDROCK_OPENAI_AWS_PROFILE`, `BEDROCK_OPENAI_AWS_REGION`,
-  `BEDROCK_MODEL` (`astra`, `sol`, `terra`, `luna`, or a full inference profile ID),
-  and `BEDROCK_SMALL_MODEL` (default `luna`). `--model <alias>` is the command-line
-  equivalent of `BEDROCK_MODEL`; `--effort <low|medium|high|max>` exports
-  `BEDROCK_EFFORT`, which wins over Claude Code's own effort signal. The proxy sends
-  this accepted Bedrock OpenAI shape: `{"reasoning":{"effort":"<value>"}}`.
-  Defaults are Astra/Sol `high`, Terra `max`, Luna `medium`. Run `aws sso login --sso-session dfx5`
-  if the SSO token expires. `claude2bedrock --openai test --model terra --effort max`
-  verifies the full proxy path.
-
-### OpenAI Bedrock combinations
-
-```bash
-claude2bedrock --openai --model luna --effort medium -p "despliega y verifica el servicio"
-claude2bedrock --openai --model terra --effort max -p "implementa y prueba el cambio"
-claude2bedrock --openai --model sol --effort high -p "resuelve este problema complejo"
-claude2bedrock --openai --model astra --effort high -p "revisa este diff y encuentra bugs"
-```
-
-Use Luna medium for deployments and operations; Terra max for coding; Sol high for
-complex tasks; and Astra high for design plus complex reviews, including code review,
-adversarial review, and bug hunting.
 - **`claude2kiro`** — install **[sgeraldes/claude2kiro](https://github.com/sgeraldes/claude2kiro)**
   (proxy with login, TUI dashboard, credits tracking) and use `claude2kiro run`.
 - **`claude2openai`** — log into the Codex CLI once (`codex login`), then build the
@@ -140,9 +117,9 @@ subagents under `~/.claude/agents`.
 
 ## Perfiles: sincronización en cada lanzamiento
 
-`claude2kiro`, `claude2openai`, `claude2kimi`, `claude2deepseek` y `claude2bedrock` sincronizan las
-instrucciones antes de iniciar Claude Code. Bedrock cubre los perfiles `bedrock`
-y `bedrock-openai`. `claude2personal` y `claude2work` mantienen su seed propio.
+`claude2kiro`, `claude2openai`, `claude2kimi` y `claude2deepseek` sincronizan las
+instrucciones antes de iniciar Claude Code. `claude2personal` y `claude2work` mantienen
+su seed propio.
 Los comandos de administración de OpenAI que no inician Claude Code conservan
 su paso directo al proxy.
 
@@ -188,7 +165,7 @@ Las corridas headless (`-p`) tienen un tope de 90 minutos por defecto. Las sesio
 interactivas no tienen tope. Se puede cambiar por corrida o para el entorno:
 
 ```bash
-claude2bedrock --openai --model luna --effort low --max-minutes 45 -p "despliega y verifica"
+claude2openai --max-minutes 45 -p "despliega y verifica"
 CLAUDE2_MAX_MINUTES=30 claude2kiro remote -p "revisa este diff"
 ```
 
@@ -204,18 +181,34 @@ tope nunca detiene un proxy compartido.
 El helper no agrega texto al prompt ni filtra la salida. Al vencer, busca los procesos
 de Claude Code que descienden de la corrida y los termina; si Claude Code todavía no
 arrancó (login SSO, arranque del proxy), termina la corrida misma. Ctrl-C sobre el
-launcher hace lo mismo. Tienen tope `claude2kiro`, `claude2openai` y `claude2bedrock`
-(ambos modos); `claude2kimi`, `claude2personal` y `claude2work` no pasan por el helper.
+launcher hace lo mismo. Tienen tope `claude2kiro`, `claude2openai`, `claude2kimi` y
+`claude2deepseek`; `claude2personal` y `claude2work` no pasan por el helper.
 La variable `CLAUDE2ALL_TIMEOUT_ACTIVE` sólo vive entre el helper y el launcher que lo
 llamó; Claude Code y los proxies no la heredan, así que un launcher anidado recibe su
 propio tope. Con `CLAUDE2ALL_DEBUG=1` el helper escribe en stderr cada fase del corte con
 su tiempo (consulta del árbol, cierre, gracia, fuerza).
 
+### Corridas headless sin MCP
+
+Una corrida `-p` es trabajo delegado: el helper le agrega `--strict-mcp-config`, así que
+arranca sin servidores MCP. Cada servidor que carga una corrida es un árbol de procesos
+propio; el 25-sep-2026, con varias corridas en paralelo, la máquina llegó a 254 procesos
+MCP y 9 GB. Se recuperan cuando hacen falta:
+
+```bash
+claude2kimi --mcp-config .mcp.json -p "usa el MCP de este repo"   # sólo los de ese archivo
+CLAUDE2ALL_MCP=all claude2openai -p "necesito Slack y Kantata"    # todos, como antes
+```
+
+Un `--strict-mcp-config` propio no se duplica. Las sesiones interactivas no cambian. El helper
+lee los argumentos como opciones con sus valores: `-p`, `--print` y `--print=true` cuentan como
+headless; un `-p` que es el valor de otra opción (`--append-system-prompt -p`) no. El flag va
+adelante de los argumentos de Claude Code, nunca entre una opción y su valor.
+
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 
 ```bash
 CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2kimi
-CLAUDE2ALL_SEED_ONLY=1 CLAUDE_CONFIG_DIR=/ruta/al/perfil-de-prueba claude2bedrock --openai
 node tests/profile-sync.cjs
 node tests/profile-sync.cjs "$HOME/.local/bin"
 node tests/claude2deepseek.cjs

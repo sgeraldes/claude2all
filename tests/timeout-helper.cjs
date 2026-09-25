@@ -16,6 +16,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'claude2all-timeout-test-'));
 const baseEnv = { ...process.env };
 delete baseEnv.CLAUDE2ALL_TIMEOUT_ACTIVE;
 delete baseEnv.CLAUDE2_MAX_MINUTES;
+delete baseEnv.CLAUDE2ALL_MCP;
 
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {
@@ -72,11 +73,55 @@ async function main() {
   }
   console.log('PASS parser errors exit 2');
 
-  // Arguments reach the child untouched: no marker, `--print` recognised, `--` respected.
+  // Arguments reach the child untouched apart from the MCP default below: no marker,
+  // `--print` recognised, `--` respected.
+  const lines = (result) => result.stdout.trim().split(/\r?\n/);
   const passthrough = await run([argsScript, '--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
   assert.equal(passthrough.code, 0, passthrough.stderr);
-  assert.deepEqual(passthrough.stdout.trim().split(/\r?\n/), ['--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
+  assert.deepEqual(lines(passthrough), ['--strict-mcp-config', '--print', '--output-format', 'json', 'hola', '--', '--max-minutes', '5']);
   console.log('PASS arguments pass through untouched, including everything after --');
+
+  // Flags right after -p stay flags. The 14-sep marker build appended its run id to whatever
+  // followed -p, so `-p --max-turns 2 x` reached Claude Code as an unknown option.
+  const flagsAfterP = await run([argsScript, '-p', '--max-turns', '2', 'x']);
+  assert.equal(flagsAfterP.code, 0, flagsAfterP.stderr);
+  assert.deepEqual(lines(flagsAfterP), ['--strict-mcp-config', '-p', '--max-turns', '2', 'x']);
+  console.log('PASS flags after -p reach Claude Code as flags');
+
+  // Headless runs load no MCP servers unless the caller asks for them.
+  for (const [args, env, expected, why] of [
+    [[argsScript, '--mcp-config', 'cfg.json', '-p', 'x'], {}, ['--mcp-config', 'cfg.json', '-p', 'x'], 'an explicit --mcp-config'],
+    [[argsScript, '--mcp-config=cfg.json', '-p', 'x'], {}, ['--mcp-config=cfg.json', '-p', 'x'], 'an explicit --mcp-config=...'],
+    [[argsScript, '--strict-mcp-config', '-p', 'x'], {}, ['--strict-mcp-config', '-p', 'x'], 'an explicit --strict-mcp-config (not doubled)'],
+    [[argsScript, '-p', 'x'], { CLAUDE2ALL_MCP: 'all' }, ['-p', 'x'], 'CLAUDE2ALL_MCP=all'],
+    [[argsScript, 'hola'], {}, ['hola'], 'an interactive run'],
+    [[argsScript, 'run', '-p', 'x'], {}, ['run', '--strict-mcp-config', '-p', 'x'], 'a launcher subcommand before -p'],
+  ]) {
+    const result = await run(args, env);
+    assert.equal(result.code, 0, `${why}: ${result.stderr}`);
+    assert.deepEqual(lines(result), expected, why);
+  }
+  console.log('PASS headless runs get --strict-mcp-config unless MCP is asked for; interactive runs are untouched');
+
+  // Headless is decided by parsing, not by searching the text for "-p" (review of #4): an
+  // option's value that happens to be "-p" is not the print flag, `--print=true` is, and the
+  // flag goes in front of Claude Code's arguments, never between an option and its value.
+  for (const [args, expected, why] of [
+    [[argsScript, '--append-system-prompt', '-p'], ['--append-system-prompt', '-p'], '-p as the value of --append-system-prompt'],
+    [[argsScript, '--print=true', 'x'], ['--strict-mcp-config', '--print=true', 'x'], '--print=true'],
+    [[argsScript, '--model', 'm', '-p', 'y'], ['--strict-mcp-config', '--model', 'm', '-p', 'y'], 'an option with a value before -p'],
+    [[argsScript, '-p', '--', '-dash prompt'], ['--strict-mcp-config', '-p', '--', '-dash prompt'], 'a prompt that starts with a dash, after --'],
+    [[argsScript, '--', '-p'], ['--', '-p'], '-p after -- is part of the prompt'],
+    [[argsScript, '--add-dir', 'a', 'b', '-p', 'x'], ['--strict-mcp-config', '--add-dir', 'a', 'b', '-p', 'x'], 'a variadic option before -p'],
+  ]) {
+    const result = await run(args);
+    assert.equal(result.code, 0, `${why}: ${result.stderr}`);
+    assert.deepEqual(lines(result), expected, why);
+  }
+  const { parseArgs } = require('../bin/claude2all-timeout.cjs');
+  assert.equal(parseArgs(['--', 'claude', '--print=true', 'x'], {}).timeoutMs, 90 * 60_000, '--print=true gets the headless limit');
+  assert.equal(parseArgs(['--', 'claude', '--append-system-prompt', '-p'], {}).timeoutMs, undefined, 'an interactive run gets no limit');
+  console.log('PASS headless detection parses options and their values');
 
   if (process.platform === 'win32') {
     // Batch files run through cmd.exe, shell scripts through Git Bash, executables directly.
