@@ -16,6 +16,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'claude2all-timeout-test-'));
 const baseEnv = { ...process.env };
 delete baseEnv.CLAUDE2ALL_TIMEOUT_ACTIVE;
 delete baseEnv.CLAUDE2_MAX_MINUTES;
+delete baseEnv.CLAUDE2ALL_MCP;
 
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {

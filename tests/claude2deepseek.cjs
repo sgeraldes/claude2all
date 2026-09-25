@@ -46,7 +46,10 @@ function home(name, config) {
 
 function run(homeDir, args, extraEnv = {}, cmd = false) {
   const env = { ...process.env, HOME: homeDir, PATH: `${posix(fakeBin)}:${process.env.PATH}`, ...extraEnv };
-  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL', 'CLAUDE_CONFIG_DIR']) delete env[k];
+  // The suite may itself run inside a launcher session: start from an environment without the
+  // helper's guard, limit or MCP opt-in, then apply each case's own values.
+  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL', 'CLAUDE_CONFIG_DIR',
+    'CLAUDE2ALL_TIMEOUT_ACTIVE', 'CLAUDE2_MAX_MINUTES', 'CLAUDE2ALL_MCP']) delete env[k];
   Object.assign(env, extraEnv);
   const file = path.join(bin, 'claude2deepseek' + (cmd ? '.cmd' : ''));
   const command = cmd ? process.env.ComSpec : bash;
