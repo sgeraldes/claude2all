@@ -200,7 +200,10 @@ claude2kimi --mcp-config .mcp.json -p "usa el MCP de este repo"   # sólo los de
 CLAUDE2ALL_MCP=all claude2openai -p "necesito Slack y Kantata"    # todos, como antes
 ```
 
-Un `--strict-mcp-config` propio no se duplica. Las sesiones interactivas no cambian.
+Un `--strict-mcp-config` propio no se duplica. Las sesiones interactivas no cambian. El helper
+lee los argumentos como opciones con sus valores: `-p`, `--print` y `--print=true` cuentan como
+headless; un `-p` que es el valor de otra opción (`--append-system-prompt -p`) no. El flag va
+adelante de los argumentos de Claude Code, nunca entre una opción y su valor.
 
 Para ejecutar sólo el seed, sin credenciales ni inicio de agentes:
 

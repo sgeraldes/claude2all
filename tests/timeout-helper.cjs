@@ -103,6 +103,26 @@ async function main() {
   }
   console.log('PASS headless runs get --strict-mcp-config unless MCP is asked for; interactive runs are untouched');
 
+  // Headless is decided by parsing, not by searching the text for "-p" (review of #4): an
+  // option's value that happens to be "-p" is not the print flag, `--print=true` is, and the
+  // flag goes in front of Claude Code's arguments, never between an option and its value.
+  for (const [args, expected, why] of [
+    [[argsScript, '--append-system-prompt', '-p'], ['--append-system-prompt', '-p'], '-p as the value of --append-system-prompt'],
+    [[argsScript, '--print=true', 'x'], ['--strict-mcp-config', '--print=true', 'x'], '--print=true'],
+    [[argsScript, '--model', 'm', '-p', 'y'], ['--strict-mcp-config', '--model', 'm', '-p', 'y'], 'an option with a value before -p'],
+    [[argsScript, '-p', '--', '-dash prompt'], ['--strict-mcp-config', '-p', '--', '-dash prompt'], 'a prompt that starts with a dash, after --'],
+    [[argsScript, '--', '-p'], ['--', '-p'], '-p after -- is part of the prompt'],
+    [[argsScript, '--add-dir', 'a', 'b', '-p', 'x'], ['--strict-mcp-config', '--add-dir', 'a', 'b', '-p', 'x'], 'a variadic option before -p'],
+  ]) {
+    const result = await run(args);
+    assert.equal(result.code, 0, `${why}: ${result.stderr}`);
+    assert.deepEqual(lines(result), expected, why);
+  }
+  const { parseArgs } = require('../bin/claude2all-timeout.cjs');
+  assert.equal(parseArgs(['--', 'claude', '--print=true', 'x'], {}).timeoutMs, 90 * 60_000, '--print=true gets the headless limit');
+  assert.equal(parseArgs(['--', 'claude', '--append-system-prompt', '-p'], {}).timeoutMs, undefined, 'an interactive run gets no limit');
+  console.log('PASS headless detection parses options and their values');
+
   if (process.platform === 'win32') {
     // Batch files run through cmd.exe, shell scripts through Git Bash, executables directly.
     const cmd = write('echo.cmd', ['@echo off\r', 'echo CMD %~1\r']); // %~1 strips the quotes cmd keeps on %1

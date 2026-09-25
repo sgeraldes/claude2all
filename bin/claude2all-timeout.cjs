@@ -77,9 +77,11 @@ function parseArgs(argv, env = process.env) {
     return { commandArgs: filteredArgs, timeoutMs: undefined, minutes: undefined };
   }
 
-  const own = filteredArgs.indexOf('--') === -1 ? filteredArgs : filteredArgs.slice(0, filteredArgs.indexOf('--'));
-  const headless = own.includes('-p') || own.includes('--print');
-  const commandOut = headless ? withoutMcpByDefault(filteredArgs, own, env) : filteredArgs;
+  // filteredArgs[0] is the launcher; a launcher subcommand (`run`, `remote`) comes before
+  // Claude Code's own arguments and must stay right after it.
+  const start = LAUNCHER_SUBCOMMANDS.has(filteredArgs[1]) ? 2 : 1;
+  const { headless, flags } = scanClaudeArgs(filteredArgs.slice(start));
+  const commandOut = headless ? withoutMcpByDefault(filteredArgs, start, flags, env) : filteredArgs;
   if (requestedMinutes === undefined || requestedMinutes === '') {
     requestedMinutes = headless ? '90' : undefined;
   }
@@ -102,13 +104,50 @@ function parseArgs(argv, env = process.env) {
 // A headless run is delegated work, so it loads no MCP servers unless the caller asks for
 // them: `--mcp-config`, `--strict-mcp-config`, or CLAUDE2ALL_MCP=all. Each server a run loads
 // is a process tree of its own; measured on 25-sep-2026, parallel runs had pushed the machine
-// to 254 MCP processes and 9 GB. The flag goes right before -p/--print, so a launcher
-// subcommand in front (`claude2openai run ...`) stays first.
-function withoutMcpByDefault(args, own, env) {
-  const asks = (flag) => own.some((a) => a === flag || a.startsWith(`${flag}=`));
-  if (env.CLAUDE2ALL_MCP === 'all' || asks('--mcp-config') || asks('--strict-mcp-config')) return args;
-  const at = args.findIndex((a) => a === '-p' || a === '--print');
-  return [...args.slice(0, at), '--strict-mcp-config', ...args.slice(at)];
+// to 254 MCP processes and 9 GB. The flag goes in front of Claude Code's arguments (after a
+// launcher subcommand), where it can never split an option from its value.
+function withoutMcpByDefault(args, start, flags, env) {
+  if (env.CLAUDE2ALL_MCP === 'all' || flags.has('--mcp-config') || flags.has('--strict-mcp-config')) return args;
+  return [...args.slice(0, start), '--strict-mcp-config', ...args.slice(start)];
+}
+
+const LAUNCHER_SUBCOMMANDS = new Set(['run', 'remote']);
+
+// Claude Code 2.1.278 options that take values, from `claude --help`; every other option is a
+// flag. Knowing them is what tells `--append-system-prompt -p` (a value) from `-p` (the flag).
+const TAKES_ONE = new Set(['--agent', '--agents', '--append-system-prompt', '--append-system-prompt-file',
+  '--autocompact', '--debug-file', '--effort', '--environment', '--fallback-model', '--input-format',
+  '--json-schema', '--max-budget-usd', '--max-turns', '--model', '-n', '--name', '--output-format',
+  '--permission-mode', '--permission-prompt-tool', '--permission-prompts', '--plugin-dir', '--plugin-url',
+  '--remote-control-session-name-prefix', '--session-id', '--setting-sources', '--settings',
+  '--system-prompt', '--system-prompt-file', '--system-prompt-snapshot']);
+const TAKES_MANY = new Set(['--add-dir', '--allowedTools', '--allowed-tools', '--betas', '--disallowedTools',
+  '--disallowed-tools', '--file', '--mcp-config', '--tools']);
+const TAKES_OPTIONAL = new Set(['--cloud', '-d', '--debug', '--from-pr', '--prompt-suggestions',
+  '--remote-control', '-r', '--resume', '--teleport']);
+
+// Walk Claude Code's arguments the way its parser does: which options are present, and
+// whether -p/--print (or --print=<true>) is one of them. A literal `--` ends the options.
+function scanClaudeArgs(args) {
+  const flags = new Set();
+  let headless = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--') break;
+    if (!arg.startsWith('-') || arg === '-') continue;
+    const eq = arg.startsWith('--') ? arg.indexOf('=') : -1;
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    flags.add(name);
+    if (name === '-p' || name === '--print') {
+      if (eq === -1 || !/^(false|0|no)$/i.test(arg.slice(eq + 1))) headless = true;
+      continue;
+    }
+    if (eq !== -1) continue; // --option=value is a single token
+    if (TAKES_ONE.has(name)) i += 1;
+    else if (TAKES_MANY.has(name)) { while (i + 1 < args.length && !args[i + 1].startsWith('-')) i += 1; }
+    else if (TAKES_OPTIONAL.has(name) && i + 1 < args.length && !args[i + 1].startsWith('-')) i += 1;
+  }
+  return { headless, flags };
 }
 
 // Run a helper command without blocking the event loop. Resolves with
